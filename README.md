@@ -1,135 +1,135 @@
-# Template for Isaac Lab Projects
+# IsaacLab Task Maker
 
-## Overview
+Config-only imitation learning task creation for [Isaac Lab](https://github.com/isaac-sim/IsaacLab).
 
-This project/repository serves as a template for building projects or extensions based on Isaac Lab.
-It allows you to develop in an isolated environment, outside of the core Isaac Lab repository.
+Create new IL tasks by writing **only configuration files** — no Python logic needed per task. Swap robots, scenes, and MDP settings through config inheritance.
 
-**Key Features:**
+## Features
 
-- `Isolation` Work outside the core Isaac Lab repository, ensuring that your development efforts remain self-contained.
-- `Flexibility` This template is set up to allow your code to be run as an extension in Omniverse.
+- **Config-only tasks** — define new tasks by copying an example config and swapping robot/scene/joints
+- **Shared base environment** — `BaseILEnv` implements all 4 mandatory `ManagerBasedRLMimicEnv` methods once
+- **Modular folder structure** — each task lives in its own folder under `tasks/manager_based/`
+- **Built-in MDP helpers** — EEF pose, object observation, and joint state functions ready to use
+- **XR teleoperation support** — OpenXR hand tracking and ManusVive out of the box
 
-**Keywords:** extension, template, isaaclab
+## Prerequisites
+
+- [Isaac Lab](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html) installed (conda or uv recommended)
+- Python 3.10+
 
 ## Installation
 
-- Install Isaac Lab by following the [installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html).
-  We recommend using the conda or uv installation as it simplifies calling Python scripts from the terminal.
-
-- Clone or copy this project/repository separately from the Isaac Lab installation (i.e. outside the `IsaacLab` directory):
-
-- Using a python interpreter that has Isaac Lab installed, install the library in editable mode using:
+1. **Clone this repository** (outside the Isaac Lab directory):
 
     ```bash
-    # use 'PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-    python -m pip install -e source/IsaacLabILEnvs
+    git clone https://github.com/REBELDOT-SOLUTIONS-S-R-L/ROBOTICS-IsaacLab-Task-Maker.git
+    cd ROBOTICS-IsaacLab-Task-Maker
+    ```
 
-- Verify that the extension is correctly installed by:
+2. **Install the extension** in your Isaac Lab conda environment:
 
-    - Listing the available tasks:
+    ```bash
+    conda activate <your-isaaclab-env>      # e.g. conda activate leisaac
+    pip install -e source/IsaacLabTaskMaker
+    ```
 
-        Note: It the task name changes, it may be necessary to update the search pattern `"Template-"`
-        (in the `scripts/list_envs.py` file) so that it can be listed.
+3. **Add the import** to your teleoperation script (one-time setup):
 
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/list_envs.py
-        ```
+    In `IsaacLab/scripts/environments/teleoperation/teleop_se3_agent.py`, add after the `import isaaclab_tasks` line:
 
-    - Running a task:
+    ```python
+    import isaaclab_task_maker  # noqa: F401
+    ```
 
-        ```bash
-        # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-        python scripts/<RL_LIBRARY>/train.py --task=<TASK_NAME>
-        ```
+4. **Verify** the installation:
 
-    - Running a task with dummy agents:
+    ```bash
+    python scripts/list_envs.py
+    ```
 
-        These include dummy agents that output zero or random agents. They are useful to ensure that the environments are configured correctly.
+    You should see `IL-TM7-G1-v0` (or any registered tasks) in the output.
 
-        - Zero-action agent
+## Usage
 
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/zero_agent.py --task=<TASK_NAME>
-            ```
-        - Random-action agent
-
-            ```bash
-            # use 'FULL_PATH_TO_isaaclab.sh|bat -p' instead of 'python' if Isaac Lab is not installed in Python venv or conda
-            python scripts/random_agent.py --task=<TASK_NAME>
-            ```
-
-### Set up IDE (Optional)
-
-To setup the IDE, please follow these instructions:
-
-- Run VSCode Tasks, by pressing `Ctrl+Shift+P`, selecting `Tasks: Run Task` and running the `setup_python_env` in the drop down menu.
-  When running this task, you will be prompted to add the absolute path to your Isaac Sim installation.
-
-If everything executes correctly, it should create a file .python.env in the `.vscode` directory.
-The file contains the python paths to all the extensions provided by Isaac Sim and Omniverse.
-This helps in indexing all the python modules for intelligent suggestions while writing code.
-
-### Setup as Omniverse Extension (Optional)
-
-We provide an example UI extension that will load upon enabling your extension defined in `source/IsaacLabILEnvs/IsaacLabILEnvs/ui_extension_example.py`.
-
-To enable your extension, follow these steps:
-
-1. **Add the search path of this project/repository** to the extension manager:
-    - Navigate to the extension manager using `Window` -> `Extensions`.
-    - Click on the **Hamburger Icon**, then go to `Settings`.
-    - In the `Extension Search Paths`, enter the absolute path to the `source` directory of this project/repository.
-    - If not already present, in the `Extension Search Paths`, enter the path that leads to Isaac Lab's extension directory directory (`IsaacLab/source`)
-    - Click on the **Hamburger Icon**, then click `Refresh`.
-
-2. **Search and enable your extension**:
-    - Find your extension under the `Third Party` category.
-    - Toggle it to enable your extension.
-
-## Code formatting
-
-We have a pre-commit template to automatically format your code.
-To install pre-commit:
+### Running teleoperation
 
 ```bash
-pip install pre-commit
+cd <IsaacLab-directory>
+./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py \
+    --task IL-TM7-G1-v0 \
+    --enable_pinocchio \
+    --teleop_device handtracking
 ```
 
-Then you can run pre-commit with:
+### Creating a new task
 
-```bash
-pre-commit run --all-files
+1. Create a new folder under `tasks/manager_based/`:
+
+    ```
+    tasks/manager_based/my_task/
+    ├── __init__.py       ← gym.register()
+    └── my_task_cfg.py    ← your config (copy from tm7_g1)
+    ```
+
+2. Copy the example task config:
+
+    ```bash
+    cp source/IsaacLabTaskMaker/isaaclab_task_maker/tasks/manager_based/tm7_g1/tm7_g1_cfg.py \
+       source/IsaacLabTaskMaker/isaaclab_task_maker/tasks/manager_based/my_task/my_task_cfg.py
+    ```
+
+3. In `my_task_cfg.py`:
+    - Swap the **robot** `ArticulationCfg` import
+    - Update **USD scene/object paths**
+    - Set IK **joint names** and **EEF link names**
+    - Configure `eef_names`, `eef_action_slices`, `eef_gripper_slices`
+
+4. Create `__init__.py` with `gym.register()`:
+
+    ```python
+    import gymnasium as gym
+
+    gym.register(
+        id="IL-MyRobot-MyTask-v0",
+        entry_point="isaaclab_task_maker.tasks.manager_based.base_il_env.base_il_env:BaseILEnv",
+        disable_env_checker=True,
+        kwargs={
+            "env_cfg_entry_point": f"{__name__}.my_task_cfg:MyTaskCfg",
+        },
+    )
+    ```
+
+5. Reinstall and run:
+
+    ```bash
+    pip install -e source/IsaacLabTaskMaker
+    ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py --task IL-MyRobot-MyTask-v0
+    ```
+
+## Project Structure
+
+```
+source/IsaacLabTaskMaker/
+├── config/extension.toml           ← extension metadata & dependencies
+├── setup.py                        ← pip install configuration
+└── isaaclab_task_maker/
+    ├── __init__.py                  ← package entry point
+    ├── assets/                      ← USD scenes, objects, robots
+    │   ├── scenes/
+    │   ├── objects/
+    │   └── robots/
+    └── tasks/
+        └── manager_based/
+            ├── base_il_env/         ← shared base (DO NOT MODIFY)
+            │   ├── base_il_env.py   ← BaseILEnv class
+            │   ├── base_il_env_cfg.py
+            │   └── mdp/
+            │       └── observations.py
+            └── tm7_g1/              ← example task
+                ├── __init__.py
+                └── tm7_g1_cfg.py
 ```
 
-## Troubleshooting
+## License
 
-### Pylance Missing Indexing of Extensions
-
-In some VsCode versions, the indexing of part of the extensions is missing.
-In this case, add the path to your extension in `.vscode/settings.json` under the key `"python.analysis.extraPaths"`.
-
-```json
-{
-    "python.analysis.extraPaths": [
-        "<path-to-ext-repo>/source/IsaacLabILEnvs"
-    ]
-}
-```
-
-### Pylance Crash
-
-If you encounter a crash in `pylance`, it is probable that too many files are indexed and you run out of memory.
-A possible solution is to exclude some of omniverse packages that are not used in your project.
-To do so, modify `.vscode/settings.json` and comment out packages under the key `"python.analysis.extraPaths"`
-Some examples of packages that can likely be excluded are:
-
-```json
-"<path-to-isaac-sim>/extscache/omni.anim.*"         // Animation packages
-"<path-to-isaac-sim>/extscache/omni.kit.*"          // Kit UI tools
-"<path-to-isaac-sim>/extscache/omni.graph.*"        // Graph UI tools
-"<path-to-isaac-sim>/extscache/omni.services.*"     // Services tools
-...
-```
+BSD-3-Clause
