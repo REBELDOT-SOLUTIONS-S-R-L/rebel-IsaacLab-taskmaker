@@ -22,7 +22,7 @@ keywords = ["imitation-learning", "isaaclab", "teleoperation"]
 "isaaclab_tasks" = {}
 
 [[python.module]]
-name = "IsaacLabILEnvs"
+name = "isaaclab_task_maker"
 
 [isaac_lab_settings]
 # TODO: Uncomment and list any apt dependencies here.

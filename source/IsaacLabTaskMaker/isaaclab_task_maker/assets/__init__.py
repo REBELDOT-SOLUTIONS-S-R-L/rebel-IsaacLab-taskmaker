@@ -3,10 +3,10 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Asset path constants for IsaacLabILEnvs.
+"""Asset path constants for isaaclab_task_maker.
 
 Usage:
-    from IsaacLabILEnvs.assets import SCENES_DIR, OBJECTS_DIR, ROBOTS_DIR
+    from isaaclab_task_maker.assets import SCENES_DIR, OBJECTS_DIR, ROBOTS_DIR
 
     SCENE_USD_PATH = os.path.join(SCENES_DIR, "tm7_g1", "scene.usd")
 """

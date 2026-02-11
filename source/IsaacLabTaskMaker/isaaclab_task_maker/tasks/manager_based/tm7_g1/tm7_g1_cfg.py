@@ -44,8 +44,8 @@ from isaaclab.sim.spawners.from_files.from_files_cfg import GroundPlaneCfg, UsdF
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
 
-from IsaacLabILEnvs.tasks.manager_based.base_il_env import mdp
-from IsaacLabILEnvs.tasks.manager_based.base_il_env.base_il_env_cfg import BaseILEnvCfg
+from isaaclab_task_maker.tasks.manager_based.base_il_env import mdp
+from isaaclab_task_maker.tasks.manager_based.base_il_env.base_il_env_cfg import BaseILEnvCfg
 
 from isaaclab_assets.robots.unitree import G1_INSPIRE_FTP_CFG # isort: skip
 

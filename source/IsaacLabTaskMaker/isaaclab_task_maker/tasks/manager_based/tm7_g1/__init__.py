@@ -10,7 +10,7 @@ import gymnasium as gym
 ##
 gym.register(
     id="IL-TM7-G1-v0",
-    entry_point="IsaacLabILEnvs.tasks.manager_based.base_il_env.base_il_env:BaseILEnv",
+    entry_point="isaaclab_task_maker.tasks.manager_based.base_il_env.base_il_env:BaseILEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.tm7_g1_cfg:TM7G1TaskCfg",
