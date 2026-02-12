@@ -7,12 +7,12 @@ version = "0.1.0"
 category = "isaaclab"
 readme  = "README.md"
 
-title = "Extension Template"
-author = "Isaac Lab Project Developers"
-maintainer = "Isaac Lab Project Developers"
-description="Extension Template for Isaac Lab"
-repository = "https://github.com/isaac-sim/IsaacLab.git"
-keywords = ["extension", "template", "isaaclab"]
+title = "IsaacLab IL Task Maker"
+author = "REBELDOT Solutions"
+maintainer = "REBELDOT Solutions"
+description="Config-only imitation learning task creation for Isaac Lab"
+repository = "https://github.com/REBELDOT-SOLUTIONS-S-R-L/ROBOTICS-IsaacLab-Task-Maker.git"
+keywords = ["imitation-learning", "isaaclab", "teleoperation"]
 
 [dependencies]
 "isaaclab" = {}
@@ -20,10 +20,9 @@ keywords = ["extension", "template", "isaaclab"]
 "isaaclab_mimic" = {}
 "isaaclab_rl" = {}
 "isaaclab_tasks" = {}
-# NOTE: Add additional dependencies here
 
 [[python.module]]
-name = "IsaacLabILEnvs"
+name = "isaaclab_task_maker"
 
 [isaac_lab_settings]
 # TODO: Uncomment and list any apt dependencies here.
