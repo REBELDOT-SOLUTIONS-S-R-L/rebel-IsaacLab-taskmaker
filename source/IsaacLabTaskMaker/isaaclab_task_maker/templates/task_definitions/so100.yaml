@@ -14,14 +14,15 @@
 # ============================================================
 
 # ---- Task identity ----
-task_name: my_custom_task                # folder name & class prefix (snake_case)
-task_id: IL-MyCustomTask-v0              # gymnasium environment ID
+task_name: so100                # folder name & class prefix (snake_case)
+task_id: IL-so100-v0              # gymnasium environment ID
 
 # ---- Robot (custom USD) ----
 # Use `usd_file` instead of `import_path` + `config_name` to load
 # the robot from a local USD file in assets/robots/<task_name>/.
 robot:
-  usd_file: my_robot.usd                # filename inside assets/robots/<task_name>/
+  import_path: isaaclab_assets.robots.so100
+  config_name: LEROBOT_SO100_CFG
   prim_path: "/World/envs/env_.*/Robot"
   scale: [1.0, 1.0, 1.0]               # optional, defaults to [1, 1, 1]
   init_pos: [0.0, 0.0, 0.0]
@@ -36,35 +37,37 @@ scene:
 
 # ---- Scene objects ----
 scene_objects:
-  - name: target_object
+  - name: tm7_bowl
     type: RigidObjectCfg
-    prim_path: "{ENV_REGEX_NS}/Scene/target_object"
-    usd_file: target_object.usd
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
+    usd_file: tm7_bowl_collisions.usd
     scale: [1.0, 1.0, 1.0]
     init_pos: [0.5, 0.0, 0.1]
     init_rot: [1.0, 0.0, 0.0, 0.0]
 
 # ---- IK Controller ----
 ik_controller:
-  controller_type: joint_position        # options: pink_ik, differential_ik, joint_position, etc.
+  controller_type: differential_ik        # options: pink_ik, differential_ik, joint_position, etc.
   controlled_joint_names:
-    - "joint_1"
-    - "joint_2"
-    - "joint_3"
-    - "joint_4"
-    - "joint_5"
-    - "joint_6"
+    - "shoulder_pan"
+    - "shoulder_lift"
+    - "elbow_flex"
+    - "wrist_flex"
+    - "wrist_roll"
 
 # ---- End-effectors ----
 eef:
   names: ["ee"]
   target_links:
-    ee: ee_link
+    ee: jaw
 
 # ---- Observations ----
 observations:
   eef_link_names:
-    ee: ee_link
+    ee: jaw
+
+teleop:
+  device: keyboard                  # handtracking | manusvive | keyboard
 
 # ---- Simulation ----
 sim:

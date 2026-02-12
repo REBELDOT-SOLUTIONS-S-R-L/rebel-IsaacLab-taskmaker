@@ -96,21 +96,6 @@ ik_controller:
 
 See `templates/task_definitions/gr1t.yaml` for a full example.
 
-##### Custom robot from USD
-
-Instead of importing a pre-defined `ArticulationCfg`, you can load a robot from a local USD file:
-
-```yaml
-robot:
-  usd_file: my_robot.usd     # loaded from assets/robots/<task_name>/
-  prim_path: "/World/envs/env_.*/Robot"
-  scale: [1.0, 1.0, 1.0]
-  init_pos: [0.0, 0.0, 0.0]
-  init_rot: [1.0, 0.0, 0.0, 0.0]
-```
-
-See `templates/task_definitions/example_custom_robot.yaml` for a full example.
-
 #### 2. Generate the task
 
 ```bash
@@ -179,7 +164,6 @@ source/IsaacLabTaskMaker/
     │   └── task_definitions/             ← YAML task definitions
     │       ├── gr1t.yaml
     │       ├── example.yaml
-    │       └── example_custom_robot.yaml
     └── tasks/
         └── manager_based/
             ├── base_il_env/           ← shared base (DO NOT MODIFY)

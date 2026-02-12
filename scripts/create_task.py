@@ -67,12 +67,6 @@ def build_asset_path_constants(task_name: str, cfg: dict) -> str:
         usd_file = obj.get("usd_file", f'{obj["name"]}.usd')
         lines.append(f'{var_name} = os.path.join(OBJECTS_DIR, "{task_name}", "{usd_file}")')
 
-    # Robot USD path (when using custom USD instead of a package import)
-    robot = cfg.get("robot", {})
-    if "usd_file" in robot:
-        robot_file = robot["usd_file"]
-        lines.append(f'ROBOT_USD_PATH = os.path.join(ROBOTS_DIR, "{task_name}", "{robot_file}")')
-
     return "\n".join(lines)
 
 
@@ -184,40 +178,19 @@ def generate_task_cfg(cfg: dict) -> str:
     scene_rot = ", ".join(str(v) for v in scene.get("init_rot", [1, 0, 0, 0]))
     robot_prim_path = robot.get("prim_path", "/World/envs/env_.*/Robot")
 
-    # --- Robot import and block (import mode vs USD mode) ---
-    if "usd_file" in robot:
-        # USD mode: load robot from a local USD file
-        robot_import_line = ""
-        robot_scale = ", ".join(str(v) for v in robot.get("scale", [1.0, 1.0, 1.0]))
-        robot_block = (
-            f'    robot: ArticulationCfg = ArticulationCfg(\n'
-            f'        prim_path="{robot_prim_path}",\n'
-            f'        spawn=UsdFileCfg(\n'
-            f'            usd_path=ROBOT_USD_PATH,\n'
-            f'            scale=({robot_scale}),\n'
-            f'        ),\n'
-            f'        init_state=ArticulationCfg.InitialStateCfg(\n'
-            f'            pos=({init_pos}),\n'
-            f'            rot=({init_rot}),\n'
-            f'            joint_pos={{".*": 0.0}},\n'
-            f'            joint_vel={{".*": 0.0}},\n'
-            f'        ),\n'
-            f'    )'
-        )
-    else:
-        # Import mode: use a pre-defined ArticulationCfg from a Python package
-        robot_import_line = f"from {robot['import_path']} import {robot['config_name']}  # isort: skip"
-        robot_block = (
-            f'    robot: ArticulationCfg = {robot["config_name"]}.replace(\n'
-            f'        prim_path="{robot_prim_path}",\n'
-            f'        init_state=ArticulationCfg.InitialStateCfg(\n'
-            f'            pos=({init_pos}),\n'
-            f'            rot=({init_rot}),\n'
-            f'            joint_pos={{".*": 0.0}},\n'
-            f'            joint_vel={{".*": 0.0}},\n'
-            f'        ),\n'
-            f'    )'
-        )
+    # Robot import and block (always import mode now)
+    robot_import_line = f"from {robot['import_path']} import {robot['config_name']}  # isort: skip"
+    robot_block = (
+        f'    robot: ArticulationCfg = {robot["config_name"]}.replace(\n'
+        f'        prim_path="{robot_prim_path}",\n'
+        f'        init_state=ArticulationCfg.InitialStateCfg(\n'
+        f'            pos=({init_pos}),\n'
+        f'            rot=({init_rot}),\n'
+        f'            joint_pos={{".*": 0.0}},\n'
+        f'            joint_vel={{".*": 0.0}},\n'
+        f'        ),\n'
+        f'    )'
+    )
 
     replacements = {
         "{class_prefix}": class_prefix,
@@ -299,7 +272,6 @@ def build_extra_imports(controller_type: str) -> str:
 def build_controller_imports(controller_type: str, cfg: dict) -> str:
     """Generate controller-specific import lines."""
     teleop = cfg.get("teleop", {})
-
     imports_map = {
         "pink_ik": [
             "from isaaclab.controllers.pink_ik import NullSpacePostureTask, PinkIKControllerCfg",
@@ -333,6 +305,17 @@ def build_controller_imports(controller_type: str, cfg: dict) -> str:
             "from isaaclab.envs.mdp.actions.actions_cfg import JointEffortActionCfg",
         ],
     }
+
+    # Add Device imports for non-pink_ik controllers
+    if controller_type != "pink_ik":
+        device = teleop.get("device", "keyboard")
+        imports_map[controller_type].append("from isaaclab.devices.device_base import DevicesCfg")
+        if device == "keyboard":
+            imports_map[controller_type].append("from isaaclab.devices.keyboard import Se3KeyboardCfg")
+        elif device == "spacemouse":
+            imports_map[controller_type].append("from isaaclab.devices.spacemouse import Se3SpaceMouseCfg")
+        elif device == "gamepad":
+            imports_map[controller_type].append("from isaaclab.devices.gamepad import Se3GamepadCfg")
 
     # Add JointPositionActionCfg import for gripper on task-space controllers
     ik = cfg.get("ik_controller", {})
@@ -543,10 +526,19 @@ def _build_simple_joint_actions(
 def build_post_init_block(controller_type: str, class_prefix: str, cfg: dict) -> str:
     """Generate the __post_init__ method for the TaskCfg."""
     teleop = cfg.get("teleop", {})
+    teleop_device = teleop.get("device", "keyboard")  # Default to keyboard if missing
 
     if controller_type == "pink_ik":
         retargeter_class = teleop.get("retargeter_class", "RetargeterCfg")
-        teleop_device = teleop.get("device", "handtracking")
+        # teleop_device is already extracted above, but pink_ik block used to default to "handtracking" locally if missing which is fine to override or keep consistent.
+        # Let's use the one from config or default.
+        
+        # If device was missing in yaml, pink_ik usually defaults to handtracking, others to keyboard.
+        # To preserve exact old behavior for pink_ik we could reuse specific default, but standardizing is better.
+        # Let's stick effectively to what the code did:
+        if "device" not in teleop:
+            teleop_device = "handtracking"
+
         return (
             f"    xr: XrCfg = XrCfg(\n"
             f"        anchor_pos=(0.0, 0.0, 0.0),\n"
@@ -584,10 +576,49 @@ def build_post_init_block(controller_type: str, class_prefix: str, cfg: dict) ->
             f"        )\n"
         )
     else:
-        # For all other controllers, no special post_init needed
+        # Generic teleop for other controllers (keyboard, spacemouse, etc.)
+        device_type = teleop_device # This is now "keyboard" by default if missing
+        
+        device_config = ""
+        if device_type == "keyboard":
+            device_config = (
+                f"                \"keyboard\": Se3KeyboardCfg(\n"
+                f"                    pos_sensitivity=0.05,\n"
+                f"                    rot_sensitivity=0.05,\n"
+                f"                ),"
+            )
+        elif device_type == "spacemouse":
+            device_config = (
+                f"                \"spacemouse\": Se3SpaceMouseCfg(\n"
+                f"                    pos_sensitivity=0.05,\n"
+                f"                    rot_sensitivity=0.05,\n"
+                f"                ),"
+            )
+        elif device_type == "gamepad":
+            device_config = (
+                f"                \"gamepad\": Se3GamepadCfg(\n"
+                f"                    pos_sensitivity=10.0,\n"
+                f"                    rot_sensitivity=10.0,\n"
+                f"                ),"
+            )
+
+        if not device_config:
+             # Fallback if unknown device
+             return (
+                "    def __post_init__(self):\n"
+                "        super().__post_init__()\n"
+             )
+
         return (
-            "    def __post_init__(self):\n"
-            "        super().__post_init__()\n"
+            f"    def __post_init__(self):\n"
+            f"        super().__post_init__()\n"
+            f"\n"
+            f"        # Teleop devices\n"
+            f"        self.teleop_devices = DevicesCfg(\n"
+            f"            devices={{\n"
+            f"{device_config}\n"
+            f"            }}\n"
+            f"        )\n"
         )
 
 
@@ -617,8 +648,6 @@ def create_asset_folders(task_name: str, cfg: dict, dry_run: bool = False):
     for obj in objects:
         usd_file = obj.get("usd_file", f'{obj["name"]}.usd')
         print(f"     Object:  assets/objects/{task_name}/{usd_file}")
-    if "usd_file" in robot:
-        print(f"     Robot:   assets/robots/{task_name}/{robot['usd_file']}")
 
 
 # ---------------------------------------------------------------------------
@@ -757,6 +786,7 @@ def main():
     parser = argparse.ArgumentParser(description="Generate a new IL task from a YAML definition.")
     parser.add_argument("yaml_file", help="Path to the YAML task definition file.")
     parser.add_argument("--dry-run", action="store_true", help="Print generated files instead of writing them.")
+    parser.add_argument("--force", "-f", action="store_true", help="Overwrite existing task folder if it exists.")
     args = parser.parse_args()
 
     # Resolve YAML path — accept just a filename or a full path
@@ -800,9 +830,14 @@ def main():
 
     # Check if task already exists
     if os.path.exists(task_dir):
-        print(f"ERROR: Task folder already exists: {task_dir}")
-        print("       Delete it first or choose a different task_name.")
-        sys.exit(1)
+        if args.force:
+            import shutil
+            shutil.rmtree(task_dir)
+            print(f"  Removed existing: {task_dir}/")
+        else:
+            print(f"ERROR: Task folder already exists: {task_dir}")
+            print("       Delete it first, choose a different task_name, or use --force to overwrite.")
+            sys.exit(1)
 
     # Create task folder and files
     os.makedirs(task_dir, exist_ok=True)
