@@ -1,0 +1,123 @@
+# ============================================================
+# Task Definition YAML — Example (TM7 G1)
+#
+# This file defines everything needed to generate
+# a new IL task folder. Run with:
+#
+#   python scripts/create_task.py scripts/task_definitions/example.yaml
+#
+# ============================================================
+
+# ---- Task identity ----
+task_name: tm7_g1                     # folder name & class prefix (snake_case)
+task_id: IL-TM7-G1-v0                # gymnasium environment ID
+
+# ---- Robot ----
+robot:
+  import_path: isaaclab_assets.robots.unitree   # Python import path
+  config_name: G1_INSPIRE_FTP_CFG               # ArticulationCfg variable name
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.9, 0.0]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]        # w, x, y, z
+
+# ---- Scene USD ----
+# The scene USD will be loaded from:
+#   assets/scenes/<task_name>/scene.usd
+scene:
+  usd_file: scene.usd                 # filename inside assets/scenes/<task_name>/
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+# ---- Scene objects ----
+# Object USDs will be loaded from: assets/objects/<task_name>/<usd_file>
+scene_objects:
+  - name: tm7_bowl
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
+    usd_file: tm7_bowl_collisions.usd   # filename inside assets/objects/<task_name>/
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.185]
+    init_rot: [0.70711, 0.0, 0.0, 0.70711]
+  - name: tm7_lid
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_lid"
+    usd_file: tm7_lid_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.2]
+    init_rot: [0.5, 0.5, -0.5, 0.5]
+
+# ---- IK Controller ----
+ik_controller:
+  controller_type: pink_ik               # options: pink_ik, differential_ik, joint_position
+  base_link_name: pelvis
+  controlled_joint_names:
+    - ".*_shoulder_pitch_joint"
+    - ".*_shoulder_roll_joint"
+    - ".*_shoulder_yaw_joint"
+    - ".*_elbow_joint"
+    - ".*_wrist_yaw_joint"
+    - ".*_wrist_roll_joint"
+    - ".*_wrist_pitch_joint"
+  hand_joint_names:
+    - "L_index_proximal_joint"
+    - "L_middle_proximal_joint"
+    - "L_pinky_proximal_joint"
+    - "L_ring_proximal_joint"
+    - "L_thumb_proximal_yaw_joint"
+    - "R_index_proximal_joint"
+    - "R_middle_proximal_joint"
+    - "R_pinky_proximal_joint"
+    - "R_ring_proximal_joint"
+    - "R_thumb_proximal_yaw_joint"
+    - "L_index_intermediate_joint"
+    - "L_middle_intermediate_joint"
+    - "L_pinky_intermediate_joint"
+    - "L_ring_intermediate_joint"
+    - "L_thumb_proximal_pitch_joint"
+    - "R_index_intermediate_joint"
+    - "R_middle_intermediate_joint"
+    - "R_pinky_intermediate_joint"
+    - "R_ring_intermediate_joint"
+    - "R_thumb_proximal_pitch_joint"
+    - "L_thumb_intermediate_joint"
+    - "R_thumb_intermediate_joint"
+    - "L_thumb_distal_joint"
+    - "R_thumb_distal_joint"
+  num_hand_joints: 24
+  # Joints for NullSpacePostureTask (optional — omit for robots without null-space control)
+  null_space_joints:
+    - "waist_yaw_joint"
+    - "waist_pitch_joint"
+    - "waist_roll_joint"
+
+# ---- End-effectors ----
+eef:
+  names: ["left", "right"]
+  target_links:
+    left_wrist: left_wrist_yaw_link
+    right_wrist: right_wrist_yaw_link
+  # Frame names used by Pink IK (URDF prefix + link name)
+  frame_names:
+    left: g1_29dof_rev_1_0_left_wrist_yaw_link
+    right: g1_29dof_rev_1_0_right_wrist_yaw_link
+
+# ---- Observations ----
+observations:
+  eef_link_names:
+    left: left_wrist_yaw_link
+    right: right_wrist_yaw_link
+
+# ---- Teleop ----
+teleop:
+  device: handtracking                  # handtracking | manusvive | keyboard
+  retargeter_import: isaaclab.devices.openxr.retargeters.humanoid.unitree.inspire.g1_upper_body_retargeter
+  retargeter_class: UnitreeG1RetargeterCfg
+
+# ---- Simulation ----
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333                         # 1/120
+  render_interval: 2
+  env_spacing: 2.5

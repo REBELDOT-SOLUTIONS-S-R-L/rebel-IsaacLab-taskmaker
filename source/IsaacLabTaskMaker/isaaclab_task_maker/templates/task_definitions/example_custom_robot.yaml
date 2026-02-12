@@ -1,0 +1,75 @@
+# ============================================================
+# Task Definition YAML — Example with Custom Robot USD
+#
+# This example shows how to load a robot from a local USD file
+# instead of importing a pre-defined ArticulationCfg from a
+# Python package.
+#
+# The robot USD will be loaded from:
+#   assets/robots/<task_name>/<usd_file>
+#
+# Run with:
+#   python scripts/create_task.py task_definitions/example_custom_robot.yaml
+#
+# ============================================================
+
+# ---- Task identity ----
+task_name: my_custom_task                # folder name & class prefix (snake_case)
+task_id: IL-MyCustomTask-v0              # gymnasium environment ID
+
+# ---- Robot (custom USD) ----
+# Use `usd_file` instead of `import_path` + `config_name` to load
+# the robot from a local USD file in assets/robots/<task_name>/.
+robot:
+  usd_file: my_robot.usd                # filename inside assets/robots/<task_name>/
+  prim_path: "/World/envs/env_.*/Robot"
+  scale: [1.0, 1.0, 1.0]               # optional, defaults to [1, 1, 1]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]       # w, x, y, z
+
+# ---- Scene USD ----
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+# ---- Scene objects ----
+scene_objects:
+  - name: target_object
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/target_object"
+    usd_file: target_object.usd
+    scale: [1.0, 1.0, 1.0]
+    init_pos: [0.5, 0.0, 0.1]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+
+# ---- IK Controller ----
+ik_controller:
+  controller_type: joint_position        # options: pink_ik, differential_ik, joint_position, etc.
+  controlled_joint_names:
+    - "joint_1"
+    - "joint_2"
+    - "joint_3"
+    - "joint_4"
+    - "joint_5"
+    - "joint_6"
+
+# ---- End-effectors ----
+eef:
+  names: ["ee"]
+  target_links:
+    ee: ee_link
+
+# ---- Observations ----
+observations:
+  eef_link_names:
+    ee: ee_link
+
+# ---- Simulation ----
+sim:
+  decimation: 4
+  episode_length_s: 20.0
+  dt: 0.01
+  render_interval: 2
+  env_spacing: 2.5

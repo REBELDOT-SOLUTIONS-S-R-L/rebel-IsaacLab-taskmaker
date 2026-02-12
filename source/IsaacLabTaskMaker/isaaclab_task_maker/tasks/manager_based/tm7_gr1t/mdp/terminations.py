@@ -1,0 +1,28 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Task-specific termination functions for tm7_gr1t.
+
+Add custom termination conditions here. They will be available as `mdp.<func_name>`
+in your task config's TerminationsCfg.
+
+Base terminations (time_out, etc.) are already available from isaaclab.envs.mdp.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import torch
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedRLEnv
+
+
+# Example: uncomment and customize
+# def object_dropped(env: ManagerBasedRLEnv) -> torch.Tensor:
+#     """Terminate if the object falls below a threshold."""
+#     object_pos = env.scene["object"].data.root_pos_w
+#     return object_pos[:, 2] < 0.1

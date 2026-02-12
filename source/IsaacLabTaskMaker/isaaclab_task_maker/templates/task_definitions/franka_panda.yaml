@@ -1,0 +1,93 @@
+# ============================================================
+# Task Definition YAML — Franka Panda (7-DOF arm)
+#
+# Same TM7 scene/objects but using a Franka Panda robot
+# instead of a humanoid. Demonstrates a single-arm setup
+# without hand tracking or null-space posture control.
+#
+#   python scripts/create_task.py franka_panda.yaml
+#
+# ============================================================
+
+# ---- Task identity ----
+task_name: tm7_franka                 # folder name & class prefix (snake_case)
+task_id: IL-TM7-Franka-v0            # gymnasium environment ID
+
+# ---- Robot ----
+robot:
+  import_path: isaaclab_assets.robots.franka    # Python import path
+  config_name: FRANKA_PANDA_HIGH_PD_CFG         # ArticulationCfg variable name
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]        # w, x, y, z
+
+# ---- Scene USD ----
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+# ---- Scene objects ----
+scene_objects:
+  - name: tm7_bowl
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
+    usd_file: tm7_bowl_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.185]
+    init_rot: [0.70711, 0.0, 0.0, 0.70711]
+  - name: tm7_lid
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_lid"
+    usd_file: tm7_lid_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.2]
+    init_rot: [0.5, 0.5, -0.5, 0.5]
+
+# ---- IK Controller ----
+ik_controller:
+  controller_type: differential_ik      # options: pink_ik, differential_ik, joint_position
+  base_link_name: panda_link0
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+  # Differential IK specific settings
+  ik_method: dls                         # dls, svd, or pinv
+  command_type: pose                     # pose or position
+  use_relative_mode: false
+  body_offset: [0.0, 0.0, 0.107]        # EEF offset from body frame
+
+# ---- End-effectors ----
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+# ---- Observations ----
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+# ---- Teleop ----
+teleop:
+  device: keyboard
+
+# ---- Simulation ----
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5
