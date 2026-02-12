@@ -2,7 +2,7 @@
 
 Config-only imitation learning task creation for [Isaac Lab](https://github.com/isaac-sim/IsaacLab).
 
-Create new IL tasks by writing **only configuration files** — no Python logic needed per task. Swap robots, scenes, and MDP settings through config inheritance.
+Scaffold new IL tasks from **YAML configs and templates** — a script generates the boilerplate (scene, robot, observations, actions), and you customize the resulting Python code for task-specific needs.
 
 ## Features
 
