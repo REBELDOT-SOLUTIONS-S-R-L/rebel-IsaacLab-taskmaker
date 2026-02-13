@@ -30,6 +30,10 @@ ASSETS_DIR = os.path.join(PACKAGE_DIR, "assets")
 TEMPLATES_DIR = os.path.join(PACKAGE_DIR, "templates")
 TASK_DEFS_DIR = os.path.join(TEMPLATES_DIR, "task_definitions")
 SKELETON_PATH = os.path.join(TEMPLATES_DIR, "skeleton_task_cfg.py.template")
+MDP_INIT_PATH = os.path.join(TEMPLATES_DIR, "mdp_init.py.template")
+MDP_OBS_PATH = os.path.join(TEMPLATES_DIR, "mdp_observations.py.template")
+MDP_EVENTS_PATH = os.path.join(TEMPLATES_DIR, "mdp_events.py.template")
+MDP_TERMS_PATH = os.path.join(TEMPLATES_DIR, "mdp_terminations.py.template")
 
 
 def snake_to_pascal(name: str) -> str:
@@ -654,132 +658,26 @@ def create_asset_folders(task_name: str, cfg: dict, dry_run: bool = False):
 # MDP folder generation
 # ---------------------------------------------------------------------------
 
-MDP_INIT_TEMPLATE = """\
-# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
-\"\"\"MDP functions for the {task_name} task.
-
-This module re-exports everything from the base IL MDP and adds
-task-specific observations, events, and terminations.
-\"\"\"
-
-from isaaclab.envs.mdp import *  # noqa: F401, F403
-
-# Base IL observations (EEF helpers, joint state, etc.)
-from isaaclab_task_maker.tasks.manager_based.base_il_env.mdp import *  # noqa: F401, F403
-
-# Task-specific overrides
-from .observations import *  # noqa: F401, F403
-from .events import *  # noqa: F401, F403
-from .terminations import *  # noqa: F401, F403
-"""
-
-MDP_OBSERVATIONS_TEMPLATE = """\
-# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
-\"\"\"Task-specific observation functions for {task_name}.
-
-Add custom observation terms here. They will be available as `mdp.<func_name>`
-in your task config's ObservationsCfg.
-
-Base observations (get_eef_pos, get_eef_quat, object_obs, get_robot_joint_state,
-get_all_robot_link_state) are already available from the base_il_env mdp.
-\"\"\"
-
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-import torch
-
-if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedRLEnv
-
-
-# Example: uncomment and customize
-# def my_custom_observation(env: ManagerBasedRLEnv) -> torch.Tensor:
-#     \"\"\"Compute a task-specific observation.\"\"\"
-#     return torch.zeros(env.num_envs, 1, device=env.device)
-"""
-
-MDP_EVENTS_TEMPLATE = """\
-# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
-\"\"\"Task-specific event functions for {task_name}.
-
-Add custom event/reset functions here. They will be available as `mdp.<func_name>`
-in your task config's EventCfg.
-
-Base events (reset_scene_to_default, etc.) are already available from isaaclab.envs.mdp.
-\"\"\"
-
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedRLEnv
-
-
-# Example: uncomment and customize
-# def my_custom_reset(env: ManagerBasedRLEnv, env_ids: torch.Tensor):
-#     \"\"\"Custom reset logic for specific objects.\"\"\"
-#     pass
-"""
-
-MDP_TERMINATIONS_TEMPLATE = """\
-# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
-\"\"\"Task-specific termination functions for {task_name}.
-
-Add custom termination conditions here. They will be available as `mdp.<func_name>`
-in your task config's TerminationsCfg.
-
-Base terminations (time_out, etc.) are already available from isaaclab.envs.mdp.
-\"\"\"
-
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-import torch
-
-if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedRLEnv
-
-
-# Example: uncomment and customize
-# def object_dropped(env: ManagerBasedRLEnv) -> torch.Tensor:
-#     \"\"\"Terminate if the object falls below a threshold.\"\"\"
-#     object_pos = env.scene["object"].data.root_pos_w
-#     return object_pos[:, 2] < 0.1
-"""
-
-
 def generate_mdp_files(task_name: str) -> dict[str, str]:
     """Generate the contents of all mdp/ files for a task.
 
     Returns:
         Dict mapping relative filename → content.
     """
-    return {
-        "mdp/__init__.py": MDP_INIT_TEMPLATE.format(task_name=task_name),
-        "mdp/observations.py": MDP_OBSERVATIONS_TEMPLATE.format(task_name=task_name),
-        "mdp/events.py": MDP_EVENTS_TEMPLATE.format(task_name=task_name),
-        "mdp/terminations.py": MDP_TERMINATIONS_TEMPLATE.format(task_name=task_name),
+    templates = {
+        "mdp/__init__.py": MDP_INIT_PATH,
+        "mdp/observations.py": MDP_OBS_PATH,
+        "mdp/events.py": MDP_EVENTS_PATH,
+        "mdp/terminations.py": MDP_TERMS_PATH,
     }
+
+    results = {}
+    for filename, path in templates.items():
+        with open(path, "r") as f:
+            content = f.read()
+        results[filename] = content.replace("{task_name}", task_name)
+    
+    return results
 
 
 def main():
