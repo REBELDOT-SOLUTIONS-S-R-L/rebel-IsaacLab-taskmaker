@@ -59,13 +59,13 @@ def build_asset_path_constants(task_name: str, cfg: dict) -> str:
     # Scene USD path
     scene = cfg.get("scene", {})
     scene_file = scene.get("usd_file", "scene.usd")
-    lines.append(f'SCENE_USD_PATH = os.path.join(SCENES_DIR, "{task_name}", "{scene_file}")')
+    lines.append(f'SCENE_USD_PATH = os.path.join(SCENES_DIR, "{scene_file}")')
 
     # Object USD paths
     for obj in cfg.get("scene_objects", []):
         var_name = f'{obj["name"].upper()}_USD_PATH'
         usd_file = obj.get("usd_file", f'{obj["name"]}.usd')
-        lines.append(f'{var_name} = os.path.join(OBJECTS_DIR, "{task_name}", "{usd_file}")')
+        lines.append(f'{var_name} = os.path.join(OBJECTS_DIR, "{usd_file}")')
 
     return "\n".join(lines)
 
@@ -624,18 +624,18 @@ def build_post_init_block(controller_type: str, class_prefix: str, cfg: dict) ->
 
 
 def create_asset_folders(task_name: str, cfg: dict, dry_run: bool = False):
-    """Create per-task asset subfolders under assets/scenes/, assets/objects/."""
+    """Create asset subfolders under assets/scenes/, assets/objects/."""
     folders = [
-        os.path.join(ASSETS_DIR, "scenes", task_name),
-        os.path.join(ASSETS_DIR, "objects", task_name),
-        os.path.join(ASSETS_DIR, "robots", task_name),
+        os.path.join(ASSETS_DIR, "scenes"),
+        os.path.join(ASSETS_DIR, "objects"),
+        os.path.join(ASSETS_DIR, "robots"),
     ]
     for folder in folders:
         if dry_run:
-            print(f"  Would create: {folder}/")
+            print(f"  Would ensure exists: {folder}/")
         else:
             os.makedirs(folder, exist_ok=True)
-            print(f"  Created: {folder}/")
+            # print(f"  Ensured: {folder}/") # reduce spam
 
     # Print reminders for which USD files to place
     scene = cfg.get("scene", {})
@@ -644,10 +644,10 @@ def create_asset_folders(task_name: str, cfg: dict, dry_run: bool = False):
     objects = cfg.get("scene_objects", [])
 
     print(f"\n  📁 Place your USD files:")
-    print(f"     Scene:   assets/scenes/{task_name}/{scene_file}")
+    print(f"     Scene:   assets/scenes/{scene_file}")
     for obj in objects:
         usd_file = obj.get("usd_file", f'{obj["name"]}.usd')
-        print(f"     Object:  assets/objects/{task_name}/{usd_file}")
+        print(f"     Object:  assets/objects/{usd_file}")
 
 
 # ---------------------------------------------------------------------------
