@@ -10,8 +10,6 @@ To customize further, edit this file directly after generation.
 
 import os
 
-
-
 import isaaclab.envs.mdp as base_mdp
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -36,8 +34,8 @@ from isaaclab.devices.keyboard import Se3KeyboardCfg
 # =====================================================================
 # Asset paths — loaded from assets/<category>/so100/
 # =====================================================================
-SCENE_USD_PATH = os.path.join(SCENES_DIR, "so100", "scene.usd")
-TM7_BOWL_USD_PATH = os.path.join(OBJECTS_DIR, "so100", "tm7_bowl_collisions.usd")
+SCENE_USD_PATH = os.path.join(SCENES_DIR, "scene.usd")
+TM7_BOWL_USD_PATH = os.path.join(OBJECTS_DIR, "tm7_bowl_collisions.usd")
 
 # =====================================================================
 # 1) SCENE
@@ -73,7 +71,6 @@ class So100SceneCfg(InteractiveSceneCfg):
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.5, 0.0, 0.1), rot=(1.0, 0.0, 0.0, 0.0)),
     )
-
 
 # =====================================================================
 # 2) ACTIONS
@@ -155,4 +152,3 @@ class So100TaskCfg(BaseILEnvCfg):
                 ),
             }
         )
-
