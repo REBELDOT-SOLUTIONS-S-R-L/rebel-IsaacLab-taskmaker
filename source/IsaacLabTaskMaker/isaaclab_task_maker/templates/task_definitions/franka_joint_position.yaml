@@ -1,0 +1,107 @@
+# ============================================================
+# EXAMPLE: Franka Panda 7-DOF Arm + Joint Position Control
+# ============================================================
+#
+# Robot type:  7-DOF robotic arm with parallel-jaw gripper
+# Controller:  joint_position — direct joint angle commands
+# Teleop:      Keyboard
+# Use case:    Joint-space control, RL policy deployment, replaying
+#              pre-recorded joint trajectories
+#
+# Joint Position control is the simplest controller — it directly
+# commands target joint angles. No IK computation is needed.
+# The robot's internal PD controller tracks the commanded positions.
+#
+# This is ideal when:
+#   - You have pre-recorded joint-space trajectories to replay
+#   - Your RL policy outputs joint positions
+#   - You need maximum control over individual joints
+#   - You want to avoid IK solver instabilities
+#
+# NOTE: No ik_method, command_type, or body_offset settings are
+# needed since there is no IK computation.
+#
+# Run:
+#   python scripts/create_task.py franka_joint_position.yaml --dry-run
+#   python scripts/create_task.py franka_joint_position.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: franka_joint_pos
+task_id: IL-Franka-JointPos-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.franka
+  config_name: FRANKA_PANDA_HIGH_PD_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects: []
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Joint Position control:
+#   - controlled_joint_names: arm joints receiving position commands
+#   - hand_joint_names: gripper joints (separate action group)
+#   - No IK-specific settings needed (ik_method, body_offset, etc.
+#     are ignored for this controller type)
+ik_controller:
+  controller_type: joint_position
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+# EEF config is still needed for observations (tracking the
+# gripper pose), even though the controller works in joint space.
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5

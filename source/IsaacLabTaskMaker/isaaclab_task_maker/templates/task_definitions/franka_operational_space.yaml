@@ -1,40 +1,42 @@
 # ============================================================
-# EXAMPLE: Franka Panda 7-DOF Arm + Differential IK (DLS)
+# EXAMPLE: Franka Panda 7-DOF Arm + Operational Space Controller
 # ============================================================
 #
 # Robot type:  7-DOF robotic arm with parallel-jaw gripper
-# Controller:  differential_ik — resolved-rate IK using Jacobian
-# Teleop:      Keyboard (Se3Keyboard)
-# Use case:    Single-arm pick-and-place, precision manipulation
+# Controller:  operational_space — impedance-based task-space control
+# Teleop:      Keyboard
+# Use case:    Contact-rich tasks, compliant manipulation, force control
 #
-# Differential IK is the most common controller for single-arm
-# robots. It computes joint velocities from a desired end-effector
-# velocity using the Jacobian pseudoinverse.
+# The Operational Space Controller (OSC) computes joint torques
+# to achieve desired task-space motion while maintaining a
+# specified impedance (stiffness + damping). Unlike Differential
+# IK which commands joint positions, OSC directly outputs torques,
+# making it ideal for:
+#   - Contact-rich manipulation (wiping, polishing)
+#   - Compliant insertion tasks
+#   - Tasks requiring force regulation
 #
-# Key settings for differential_ik:
-#   ik_method:         "dls" (damped least squares — most stable),
-#                      "svd" (singular value decomposition),
-#                      "pinv" (pseudoinverse — simplest)
-#   command_type:      "pose" (6-DOF position+orientation) or
-#                      "position" (3-DOF position only)
-#   use_relative_mode: true = relative commands, false = absolute
-#   body_offset:       Offset from the body frame to the actual EEF tip
+# Key settings for operational_space:
+#   body_offset:                  Offset from body frame to EEF tip
+#   nullspace_joint_pos_target:   "zero" = keep joints near zero,
+#                                 or provide explicit joint positions
+#
+# Compare with franka_panda.yaml (differential_ik) to see how the
+# same robot can use a different controller.
 #
 # Run:
-#   python scripts/create_task.py franka_panda.yaml --dry-run
-#   python scripts/create_task.py franka_panda.yaml
+#   python scripts/create_task.py franka_operational_space.yaml --dry-run
+#   python scripts/create_task.py franka_operational_space.yaml
 #
 # ============================================================
 
 
 # ─── TASK IDENTITY ───────────────────────────────────────────
-task_name: tm7_franka
-task_id: IL-TM7-Franka-v0
+task_name: franka_osc
+task_id: IL-Franka-OSC-v0
 
 
 # ─── ROBOT ───────────────────────────────────────────────────
-# Franka Panda: 7 arm joints + 2 finger joints
-# FRANKA_PANDA_HIGH_PD_CFG uses high PD gains for stable IK control.
 robot:
   import_path: isaaclab_assets.robots.franka
   config_name: FRANKA_PANDA_HIGH_PD_CFG
@@ -52,35 +54,17 @@ scene:
 
 
 # ─── SCENE OBJECTS ───────────────────────────────────────────
-scene_objects:
-  - name: tm7_bowl
-    type: RigidObjectCfg
-    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
-    usd_file: tm7_bowl_collisions.usd
-    scale: [0.35, 0.35, 0.35]
-    init_pos: [0.0, 0.5, 0.185]
-    init_rot: [0.70711, 0.0, 0.0, 0.70711]
-  - name: tm7_lid
-    type: RigidObjectCfg
-    prim_path: "{ENV_REGEX_NS}/Scene/tm7_lid"
-    usd_file: tm7_lid_collisions.usd
-    scale: [0.35, 0.35, 0.35]
-    init_pos: [0.0, 0.5, 0.2]
-    init_rot: [0.5, 0.5, -0.5, 0.5]
+scene_objects: []
 
 
 # ─── IK CONTROLLER ───────────────────────────────────────────
-# Differential IK settings:
-#   ik_method: "dls"    — Damped Least Squares (recommended, most stable)
-#              "svd"    — Truncated SVD (good near singularities)
-#              "pinv"   — Moore-Penrose pseudoinverse (simplest)
-#   command_type: "pose"     — 6-DOF SE(3) commands [position + orientation]
-#                 "position" — 3-DOF commands [position only]
-#   body_offset: Offset from panda_hand frame to the fingertip.
-#                [0, 0, 0.107] accounts for the distance between the
-#                wrist (panda_hand) and the grasp point between the fingers.
+# Operational Space Controller settings:
+#   - Uses impedance control: motion_stiffness + damping ratio
+#   - nullspace_joint_pos_target keeps redundant DOFs near a
+#     reference configuration (prevents elbow drift)
+#   - body_offset shifts the control point to the fingertip
 ik_controller:
-  controller_type: differential_ik
+  controller_type: operational_space
   base_link_name: panda_link0
   controlled_joint_names:
     - "panda_joint1"
@@ -94,16 +78,11 @@ ik_controller:
     - "panda_finger_joint1"
     - "panda_finger_joint2"
   num_hand_joints: 2
-  ik_method: dls
-  command_type: pose
-  use_relative_mode: false
   body_offset: [0.0, 0.0, 0.107]
+  nullspace_joint_pos_target: "zero"
 
 
 # ─── END-EFFECTORS ───────────────────────────────────────────
-# Single-arm robots use one EEF entry.
-# "gripper" is a logical name — you can call it anything.
-# target_links maps the logical name to the actual robot link.
 eef:
   names: ["gripper"]
   target_links:
@@ -119,8 +98,6 @@ observations:
 
 
 # ─── TELEOP ──────────────────────────────────────────────────
-# "keyboard" is the default for non-pink_ik controllers.
-# Other options: "spacemouse", "gamepad"
 teleop:
   device: keyboard
 

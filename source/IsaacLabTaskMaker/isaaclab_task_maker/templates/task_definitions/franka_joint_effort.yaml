@@ -1,0 +1,103 @@
+# ============================================================
+# EXAMPLE: Franka Panda 7-DOF Arm + Joint Effort (Torque) Control
+# ============================================================
+#
+# Robot type:  7-DOF robotic arm with parallel-jaw gripper
+# Controller:  joint_effort — direct joint torque commands
+# Teleop:      Keyboard
+# Use case:    Low-level torque control, force-sensitive tasks,
+#              advanced RL policies
+#
+# Joint Effort control commands desired joint torques (Nm) directly.
+# This is the lowest-level controller — no PD controller, no IK,
+# just raw torque commands to the actuators.
+#
+# WARNING: Torque control is the most difficult to use correctly:
+#   - No built-in stability (robot will collapse without proper torques)
+#   - Requires gravity compensation in your policy
+#   - Typically used with RL policies trained in simulation
+#   - Not recommended for keyboard teleoperation (included here
+#     for demonstration purposes)
+#
+# Run:
+#   python scripts/create_task.py franka_joint_effort.yaml --dry-run
+#   python scripts/create_task.py franka_joint_effort.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: franka_joint_effort
+task_id: IL-Franka-JointEffort-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.franka
+  config_name: FRANKA_PANDA_HIGH_PD_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects: []
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Joint Effort control:
+#   - Actions are desired torques (Nm) per joint
+#   - No PD gains, no IK — raw actuator commands
+#   - hand_joint_names generate a separate JointPositionActionCfg
+#     for the gripper (position-controlled for reliability)
+ik_controller:
+  controller_type: joint_effort
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5
