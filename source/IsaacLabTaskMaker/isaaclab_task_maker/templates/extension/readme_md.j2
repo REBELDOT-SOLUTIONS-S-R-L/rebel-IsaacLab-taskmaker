@@ -1,0 +1,44 @@
+# {{ title }}
+
+Auto-generated IsaacLab IL extension for the **{{ task_id }}** task.
+
+## Installation
+
+```bash
+cd {{ project_dir_name }}
+pip install -e source/{{ package_name }}
+```
+
+## Usage
+
+```bash
+# Run with teleoperation (using the included script)
+./isaaclab.sh -p {{ project_dir_name }}/scripts/teleop.py --task {{ task_id }}
+
+# Or run with random actions
+./isaaclab.sh -p {{ project_dir_name }}/scripts/random_agent.py --task {{ task_id }}
+```
+
+If the `scripts/` directory was not generated (no `--isaaclab-path` was provided),
+you can still use IsaacLab scripts directly by adding this import to the script:
+
+```python
+import {{ package_name }}  # noqa: F401
+```
+
+Place it after `import isaaclab_tasks` in any IsaacLab script.
+
+## Project Structure
+
+```
+source/{{ package_name }}/{{ package_name }}/
+├── assets/          # USD scene, object, and robot files
+├── base_il_env/     # Base IL environment (shared across tasks)
+└── tasks/           # Task-specific configurations and MDP functions
+```
+
+## Customization
+
+- Edit `tasks/manager_based/{{ task_name }}/{{ task_name }}_cfg.py` for task configuration
+- Add custom MDP functions in `tasks/manager_based/{{ task_name }}/mdp/`
+- Place USD files in the `assets/` subdirectories

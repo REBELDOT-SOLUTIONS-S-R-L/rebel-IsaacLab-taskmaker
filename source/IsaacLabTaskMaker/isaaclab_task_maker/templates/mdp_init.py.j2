@@ -12,7 +12,7 @@ task-specific observations, events, and terminations.
 from isaaclab.envs.mdp import *  # noqa: F401, F403
 
 # Base IL observations (EEF helpers, joint state, etc.)
-from isaaclab_task_maker.tasks.manager_based.base_il_env.mdp import *  # noqa: F401, F403
+from {{ package_name }}.base_il_env.mdp import *  # noqa: F401, F403
 
 # Task-specific overrides
 from .observations import *  # noqa: F401, F403

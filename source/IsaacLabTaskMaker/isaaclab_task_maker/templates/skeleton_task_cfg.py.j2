@@ -30,9 +30,9 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 
-from isaaclab_task_maker.assets import SCENES_DIR, OBJECTS_DIR, ROBOTS_DIR
+from {{ package_name }}.assets import SCENES_DIR, OBJECTS_DIR, ROBOTS_DIR
 from . import mdp
-from isaaclab_task_maker.tasks.manager_based.base_il_env.base_il_env_cfg import BaseILEnvCfg
+from {{ package_name }}.base_il_env.base_il_env_cfg import BaseILEnvCfg
 
 from {{ robot.import_path }} import {{ robot.config_name }}  # isort: skip
 {# --- Controller-specific imports --- #}
