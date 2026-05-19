@@ -20,6 +20,7 @@ import isaaclab.envs.mdp as base_mdp
 import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
+from isaaclab.envs.mdp.recorders.recorders_cfg import StandardAnnotatedMimicRecorderManagerCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -158,6 +159,11 @@ class BaseILEnvCfg(ManagerBasedRLEnvCfg):
     events: BaseEventCfg = BaseEventCfg()
     terminations: BaseTerminationsCfg = BaseTerminationsCfg()
 
+    # Mimic-annotated recorder is the default for all IL tasks. Override
+    # `dataset_export_dir_path` / `dataset_filename` per-run from the launcher.
+    # `entity_order` is wired to `eef_names` automatically in __post_init__.
+    recorders: StandardAnnotatedMimicRecorderManagerCfg = StandardAnnotatedMimicRecorderManagerCfg()
+
     # IL tasks don't use these
     commands = None
     rewards = None
@@ -193,3 +199,9 @@ class BaseILEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 20.0
         self.sim.dt = 1 / 120  # 120 Hz
         self.sim.render_interval = 2
+
+        # Mimic recorder needs the same EEF list that BaseILEnv's API methods iterate.
+        # Subclasses that set `self.eef_names` should call super().__post_init__()
+        # AFTER they assign it (or assign it before the super call — either works).
+        if self.eef_names:
+            self.recorders.entity_order = list(self.eef_names)

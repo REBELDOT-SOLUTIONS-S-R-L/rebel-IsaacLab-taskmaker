@@ -19,7 +19,9 @@ from __future__ import annotations
 
 import argparse
 import shutil
+import subprocess
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Optional
 
@@ -70,6 +72,12 @@ class SceneConfig(BaseModel):
     init_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
 
 
+class PhysicsMaterialConfig(BaseModel):
+    static_friction: float = 0.5
+    dynamic_friction: float = 0.5
+    restitution: float = 0.0
+
+
 class SceneObject(BaseModel):
     name: str
     type: str = "RigidObjectCfg"
@@ -78,6 +86,12 @@ class SceneObject(BaseModel):
     scale: list[float] = [1.0, 1.0, 1.0]
     init_pos: list[float]
     init_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
+    # When True, the spawner overrides the mesh collision approximation with SDF.
+    # When False, the collision approximation baked into the USD is preserved.
+    use_default_sdf_collision: bool = True
+    # Optional per-object physics material. If None, no material override is applied
+    # and the object inherits the simulation's default friction/restitution.
+    physics_material: Optional[PhysicsMaterialConfig] = None
 
 
 class IKControllerConfig(BaseModel):
@@ -183,6 +197,21 @@ def _join_floats(values: list[float]) -> str:
     return ", ".join(str(v) for v in values)
 
 
+def _cleanup_installed_artifacts(package_name: str) -> None:
+    """Remove pip package and the .pth file from site-packages."""
+    subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "-y", package_name],
+        capture_output=True,
+    )
+    pth_filename = f"{package_name}_register.pth"
+    purelib = sysconfig.get_path("purelib")
+    if purelib:
+        pth_path = Path(purelib) / pth_filename
+        if pth_path.is_file():
+            pth_path.unlink()
+            print(f"  Removed stale .pth: {pth_path}")
+
+
 def _write(path: Path, content: str, dry_run: bool = False, label: str = "") -> None:
     """Write content to a file, or print in dry-run mode."""
     if dry_run:
@@ -215,16 +244,31 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
     scene_objects = []
     for obj in cfg.scene_objects:
         usd_file = obj.usd_file or f"{obj.name}.usd"
+        leaf = obj.prim_path.rstrip("/").rsplit("/", 1)[-1]
+        physics_material = None
+        if obj.physics_material is not None:
+            physics_material = {
+                "static_friction": obj.physics_material.static_friction,
+                "dynamic_friction": obj.physics_material.dynamic_friction,
+                "restitution": obj.physics_material.restitution,
+            }
         scene_objects.append({
             "name": obj.name,
             "type": obj.type,
             "prim_path": obj.prim_path,
+            "leaf": leaf,
             "usd_file": usd_file,
             "usd_var": f"{obj.name.upper()}_USD_PATH",
             "scale": _join_floats(obj.scale),
             "init_pos": _join_floats(obj.init_pos),
             "init_rot": _join_floats(obj.init_rot),
+            "use_default_sdf_collision": obj.use_default_sdf_collision,
+            "physics_material": physics_material,
         })
+
+    has_sdf_objects = any(o.use_default_sdf_collision for o in cfg.scene_objects)
+    has_baked_collision_objects = any(not o.use_default_sdf_collision for o in cfg.scene_objects)
+    has_physics_materials = any(o.physics_material is not None for o in cfg.scene_objects)
 
     title = f"IL Task: {class_prefix}"
     description = f"Imitation-learning task extension for {class_prefix} ({cfg.task_id})"
@@ -253,6 +297,9 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
         },
         "env_spacing": cfg.sim.env_spacing,
         "scene_objects": scene_objects,
+        "has_sdf_objects": has_sdf_objects,
+        "has_baked_collision_objects": has_baked_collision_objects,
+        "has_physics_materials": has_physics_materials,
         "ik": {
             "controlled_joint_names": cfg.ik_controller.controlled_joint_names,
             "hand_joint_names": cfg.ik_controller.hand_joint_names,
@@ -266,9 +313,15 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "nullspace_joint_pos_target": cfg.ik_controller.nullspace_joint_pos_target,
         },
         "eef": {
+            "names": cfg.eef.names,
             "target_links": cfg.eef.target_links,
             "frame_names": cfg.eef.frame_names,
             "body_name": body_name,
+        },
+        "observations": {
+            # Mapping of eef_name -> robot link name. Drives EEF obs term generation.
+            # Falls back to {} if the YAML doesn't declare it.
+            "eef_link_names": (cfg.observations or {}).get("eef_link_names", {}),
         },
         "teleop": {
             "device": teleop_device,
@@ -353,6 +406,7 @@ def generate_extension_project(
     if not dry_run:
         if project_dir.exists():
             if force:
+                _cleanup_installed_artifacts(package_name)
                 shutil.rmtree(project_dir)
                 print(f"  Removed existing: {project_dir}/")
             else:

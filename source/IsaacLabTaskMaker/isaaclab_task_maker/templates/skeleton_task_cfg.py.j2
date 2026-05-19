@@ -20,6 +20,7 @@ import isaaclab.controllers.utils as ControllerUtils
 {% endif %}
 
 import isaaclab.envs.mdp as base_mdp
+import isaaclab.sim as sim_utils
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg, RigidObjectCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
@@ -84,6 +85,90 @@ SCENE_USD_PATH = os.path.join(SCENES_DIR, "{{ scene.usd_file }}")
 {{ obj.usd_var }} = os.path.join(OBJECTS_DIR, "{{ obj.usd_file }}")
 {% endfor %}
 
+{% if scene_objects %}
+{% if has_physics_materials %}
+# Per-object physics materials, keyed by the leaf prim name. The spawner looks up
+# the leaf name (e.g. "brick_2x2") and binds the matching material to all collision
+# prims under the spawned root.
+_PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
+{% for obj in scene_objects %}
+{% if obj.physics_material %}
+    "{{ obj.leaf }}": sim_utils.RigidBodyMaterialCfg(
+        static_friction={{ obj.physics_material.static_friction }},
+        dynamic_friction={{ obj.physics_material.dynamic_friction }},
+        restitution={{ obj.physics_material.restitution }},
+    ),
+{% endif %}
+{% endfor %}
+}
+
+{% endif %}
+def _apply_rigid_apis(
+    prim_path: str,
+    cfg: UsdFileCfg,
+    translation: tuple[float, float, float] | None = None,
+    orientation: tuple[float, float, float, float] | None = None,
+    **kwargs,
+):
+    """Spawn a USD and explicitly apply rigid-body / mass / collision APIs to its root prim."""
+    rigid_props = cfg.rigid_props or sim_utils.RigidBodyPropertiesCfg()
+    mass_props = cfg.mass_props or sim_utils.MassPropertiesCfg(mass=0.05)
+    collision_props = cfg.collision_props or sim_utils.CollisionPropertiesCfg()
+
+    cfg.rigid_props = None
+    cfg.mass_props = None
+    cfg.collision_props = None
+    try:
+        prim = sim_utils.spawn_from_usd(prim_path, cfg, translation=translation, orientation=orientation, **kwargs)
+    finally:
+        cfg.rigid_props = rigid_props
+        cfg.mass_props = mass_props
+        cfg.collision_props = collision_props
+
+    sim_utils.define_rigid_body_properties(prim_path, rigid_props)
+    sim_utils.define_mass_properties(prim_path, mass_props)
+    sim_utils.define_collision_properties(prim_path, collision_props)
+{% if has_physics_materials %}
+
+    # Apply per-object physics material (friction / restitution overrides).
+    leaf = prim_path.rstrip("/").rsplit("/", 1)[-1]
+    mat_cfg = _PHYSICS_MATERIALS.get(leaf)
+    if mat_cfg is not None:
+        mat_path = f"{prim_path}/physicsMaterial"
+        mat_cfg.func(mat_path, mat_cfg)
+        sim_utils.bind_physics_material(prim_path, mat_path)
+{% endif %}
+    return prim
+
+{% if has_baked_collision_objects %}
+@sim_utils.clone
+def spawn_rigid_usd(
+    prim_path: str,
+    cfg: UsdFileCfg,
+    translation: tuple[float, float, float] | None = None,
+    orientation: tuple[float, float, float, float] | None = None,
+    **kwargs,
+):
+    """Spawn USD as a rigid body; preserve the collision approximation baked into the USD."""
+    return _apply_rigid_apis(prim_path, cfg, translation, orientation, **kwargs)
+
+{% endif %}
+{% if has_sdf_objects %}
+@sim_utils.clone
+def spawn_rigid_usd_sdf(
+    prim_path: str,
+    cfg: UsdFileCfg,
+    translation: tuple[float, float, float] | None = None,
+    orientation: tuple[float, float, float, float] | None = None,
+    **kwargs,
+):
+    """Spawn USD as a rigid body and override its collision approximation with SDF."""
+    prim = _apply_rigid_apis(prim_path, cfg, translation, orientation, **kwargs)
+    sim_utils.define_mesh_collision_properties(prim_path, sim_utils.SDFMeshPropertiesCfg())
+    return prim
+
+{% endif %}
+{% endif %}
 # =====================================================================
 # 1) SCENE
 # =====================================================================
@@ -100,6 +185,14 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=({{ scene.pos }}), rot=({{ scene.rot }})),
     )
 
+    dome_light: AssetBaseCfg = AssetBaseCfg(
+        prim_path="/World/DomeLight",
+        spawn=sim_utils.DomeLightCfg(
+            intensity=1500.0,
+            color=(1.0, 1.0, 1.0),
+        ),
+    )
+
     robot: ArticulationCfg = {{ robot.config_name }}.replace(
         prim_path="{{ robot.prim_path }}",
         init_state=ArticulationCfg.InitialStateCfg(
@@ -114,8 +207,20 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
     {{ obj.name }}: {{ obj.type }} = {{ obj.type }}(
         prim_path="{{ obj.prim_path }}",
         spawn=UsdFileCfg(
+{% if obj.type in ["RigidObjectCfg", "AssetBaseCfg"] %}
+{% if obj.use_default_sdf_collision %}
+            func=spawn_rigid_usd_sdf,
+{% else %}
+            func=spawn_rigid_usd,
+{% endif %}
+{% endif %}
             usd_path={{ obj.usd_var }},
             scale=({{ obj.scale }}),
+{% if obj.type in ["RigidObjectCfg", "AssetBaseCfg"] %}
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+{% endif %}
         ),
         init_state={{ obj.type }}.InitialStateCfg(pos=({{ obj.init_pos }}), rot=({{ obj.init_rot }})),
     )
@@ -348,6 +453,15 @@ class {{ class_prefix }}ObservationsCfg:
             func=base_mdp.joint_pos,
             params={"asset_cfg": SceneEntityCfg("robot")},
         )
+{% if observations.eef_link_names %}
+        # End-effector pose observations.
+        # `BaseILEnv.get_robot_eef_pose` reads these out of obs_buf by the
+        # `{eef_name}_eef_pos` / `{eef_name}_eef_quat` keys — names must match.
+{% for eef_name, link_name in observations.eef_link_names.items() %}
+        {{ eef_name }}_eef_pos = ObsTerm(func=mdp.get_eef_pos, params={"link_name": "{{ link_name }}"})
+        {{ eef_name }}_eef_quat = ObsTerm(func=mdp.get_eef_quat, params={"link_name": "{{ link_name }}"})
+{% endfor %}
+{% endif %}
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -392,6 +506,11 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
     NUM_OPENXR_HAND_JOINTS = 26
 
     def __post_init__(self):
+{% if eef.names %}
+        # EEF list — picked up by BaseILEnv methods and wired into the
+        # recorder's entity_order by BaseILEnvCfg.__post_init__.
+        self.eef_names = {{ eef.names | pylist }}
+{% endif %}
         super().__post_init__()
 
         # Convert USD to URDF for Pink IK
@@ -420,6 +539,11 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
         )
 {% elif teleop.device in ["keyboard", "spacemouse", "gamepad"] %}
     def __post_init__(self):
+{% if eef.names %}
+        # EEF list — picked up by BaseILEnv methods and wired into the
+        # recorder's entity_order by BaseILEnvCfg.__post_init__.
+        self.eef_names = {{ eef.names | pylist }}
+{% endif %}
         super().__post_init__()
 
         # Teleop devices
@@ -445,5 +569,10 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
         )
 {% else %}
     def __post_init__(self):
+{% if eef.names %}
+        # EEF list — picked up by BaseILEnv methods and wired into the
+        # recorder's entity_order by BaseILEnvCfg.__post_init__.
+        self.eef_names = {{ eef.names | pylist }}
+{% endif %}
         super().__post_init__()
 {% endif %}
