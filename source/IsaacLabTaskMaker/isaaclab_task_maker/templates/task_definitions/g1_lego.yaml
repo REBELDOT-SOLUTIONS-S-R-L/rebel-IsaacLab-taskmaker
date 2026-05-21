@@ -148,10 +148,15 @@ ik_controller:
 
 # ─── END-EFFECTORS ───────────────────────────────────────────
 # For dual-arm humanoids with pink_ik:
-#   names:        Logical EEF identifiers (used in observations)
-#   target_links: Map of logical name → robot link name (for IK targets)
-#   frame_names:  Map of logical name → URDF frame name (Pink IK requires
-#                 the full URDF-prefixed link name, not the USD link name)
+#   names:                Logical EEF identifiers (used in observations)
+#   target_links:         Map of logical name → robot link name (for IK targets)
+#   frame_names:          Map of logical name → URDF frame name (Pink IK requires
+#                         the full URDF-prefixed link name, not the USD link name)
+#   hand_joint_prefixes:  Optional. Per-EEF prefix of `hand_joint_names` entries
+#                         that belong to that arm. Required for multi-EEF pink_ik
+#                         tasks with hand joints, so the generator can build
+#                         per-arm gripper index lists for BaseILEnv. Inspire
+#                         hands prefix every joint with "L_" / "R_".
 eef:
   names: ["left", "right"]
   target_links:
@@ -160,6 +165,9 @@ eef:
   frame_names:
     left: g1_29dof_rev_1_0_left_wrist_yaw_link
     right: g1_29dof_rev_1_0_right_wrist_yaw_link
+  hand_joint_prefixes:
+    left: "L_"
+    right: "R_"
 
 
 # ─── OBSERVATIONS ────────────────────────────────────────────
@@ -169,6 +177,62 @@ observations:
   eef_link_names:
     left: left_wrist_yaw_link
     right: right_wrist_yaw_link
+
+
+# ─── CAMERAS (optional) ──────────────────────────────────────
+# Each entry becomes a `CameraCfg` attribute on the scene cfg, plus a call
+# inside an `attach_cameras(scene_cfg)` helper so the launcher can re-attach
+# them after IsaacLab's XR pipeline strips cameras via
+# `remove_camera_configs`.
+#
+#   name:                 Python attribute on the scene cfg (e.g. `scene_cfg.head_camera`).
+#   prim_path:            USD path where the camera is mounted ({ENV_REGEX_NS} = per-env).
+#   height / width:       Image resolution in pixels.
+#   data_types:           List of channels the camera should produce ("rgb", "distance_to_image_plane", ...).
+#   focal_length:         Pinhole focal length in mm.
+#   focus_distance:       Plane-of-focus distance in cm.
+#   horizontal_aperture:  Sensor width in mm.
+#   clipping_range:       Near / far clip in meters.
+#   offset_pos:           Local-frame offset from the parent prim, meters.
+#   offset_rot:           Local-frame rotation as a quaternion [w, x, y, z].
+#   convention:           One of "opengl", "ros", "world".
+cameras:
+  - name: head_camera
+    prim_path: "{ENV_REGEX_NS}/Robot/torso_link/d435_link/head_camera"
+    height: 480
+    width: 640
+    data_types: ["rgb"]
+    focal_length: 12.0
+    focus_distance: 400.0
+    horizontal_aperture: 20.955
+    clipping_range: [0.05, 10.0]
+    offset_pos: [0.0, 0.0, 0.0]
+    offset_rot: [0.5, 0.5, -0.5, -0.5]
+    convention: opengl
+  - name: right_wrist_camera
+    prim_path: "{ENV_REGEX_NS}/Robot/right_wrist_yaw_link/right_wrist_camera"
+    height: 480
+    width: 640
+    data_types: ["rgb"]
+    focal_length: 10.0
+    focus_distance: 400.0
+    horizontal_aperture: 20.955
+    clipping_range: [0.05, 10.0]
+    offset_pos: [0.01, 0.05, 0.12]
+    offset_rot: [0.65326, 0.27061, -0.27059, -0.6533]
+    convention: opengl
+  - name: left_wrist_camera
+    prim_path: "{ENV_REGEX_NS}/Robot/left_wrist_yaw_link/left_wrist_camera"
+    height: 480
+    width: 640
+    data_types: ["rgb"]
+    focal_length: 10.0
+    focus_distance: 400.0
+    horizontal_aperture: 20.955
+    clipping_range: [0.05, 10.0]
+    offset_pos: [0.01, -0.05, 0.12]
+    offset_rot: [0.65328, 0.2706, -0.2706, -0.65328]
+    convention: opengl
 
 
 # ─── TELEOP ──────────────────────────────────────────────────
@@ -196,3 +260,121 @@ sim:
   dt: 0.008333
   render_interval: 2
   env_spacing: 2.5
+
+
+# ─── MIMIC DATA GENERATION (optional) ────────────────────────
+# When present, an additional `<task_id>-Mimic` gym env is registered
+# alongside the base task. Its cfg class (`<ClassPrefix>MimicEnvCfg`)
+# mixes the task cfg with `isaaclab.envs.mimic_env_cfg.MimicEnvCfg`,
+# exposing `datagen_config` and `subtask_configs` for the Mimic pipeline.
+#
+# datagen:    Free-form passthrough — every key is forwarded as
+#             `self.datagen_config.<key> = <value>` in the generated cfg.
+#             See `DataGenConfig` in isaaclab/envs/mimic_env_cfg.py for the
+#             full schema.
+# subtasks:   Mapping of eef_name -> ordered list of SubTaskConfig entries.
+#             Each entry is forwarded as kwargs to `SubTaskConfig(...)`.
+#             Tuple-typed fields (e.g. `subtask_term_offset_range`) are
+#             written as YAML lists and coerced to tuples by create_task.py.
+mimic:
+  datagen:
+    name: demo_src_lego_g1_D0
+    generation_guarantee: true
+    generation_keep_failed: false
+    generation_num_trials: 1000
+    generation_select_src_per_subtask: false
+    generation_select_src_per_arm: false
+    generation_transform_first_robot_pose: false
+    generation_interpolate_from_last_target_pose: true
+    max_num_failures: 25
+    seed: 1
+  # Per-arm subtasks for grasp → move → release → idle. The
+  # `subtask_term_signal` names must match attributes on the task's
+  # `DatagenInfoCfg` observation group (see lego_g1/.../lego_g1_cfg.py).
+  # The final subtask of each arm uses `null` per IsaacLab convention —
+  # it represents "run until end of demo".
+  subtasks:
+    right:
+      - object_ref: brick_2x2
+        subtask_term_signal: grasp_brick_right
+        first_subtask_start_offset_range: [0, 0]
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2
+        subtask_term_signal: move_brick_right
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 3
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2
+        subtask_term_signal: release_brick_right
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2
+        subtask_term_signal: null
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+    left:
+      - object_ref: brick_2x2_1
+        subtask_term_signal: grasp_brick_left
+        first_subtask_start_offset_range: [0, 0]
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2_1
+        subtask_term_signal: move_brick_left
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 3
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2_1
+        subtask_term_signal: release_brick_left
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: brick_2x2_1
+        subtask_term_signal: null
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false

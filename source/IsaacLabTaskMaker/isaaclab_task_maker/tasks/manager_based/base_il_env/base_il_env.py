@@ -197,3 +197,26 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
 
     def get_subtask_term_signals(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
         return {}
+
+    # ------------------------------------------------------------------
+    # 7) get_subtask_term_predicates
+    # ------------------------------------------------------------------
+    # Raw, per-step subtask-completion predicates consumed by the
+    # ``record_annotated_demos.py`` teleop recorder. The recorder reads the
+    # head signal of each EEF queue every step, dwells on it, and latches;
+    # the latched values are what eventually flow through
+    # ``get_subtask_term_signals`` into the recorded HDF5.
+    #
+    # Predicates come from a task observation group named ``subtask_terms``
+    # (with ``concatenate_terms=False`` so each term stays a separate
+    # tensor). Returned keys must equal the ``subtask_term_signal`` values
+    # declared on ``MimicEnvCfg.subtask_configs`` — that's how the recorder
+    # matches predicates back to subtasks.
+    def get_subtask_term_predicates(
+        self, env_ids: Sequence[int] | None = None
+    ) -> dict[str, torch.Tensor]:
+        if env_ids is None:
+            env_ids = slice(None)
+
+        subtask_terms = self.obs_buf["subtask_terms"]
+        return {key: subtask_terms[key][env_ids] for key in subtask_terms}

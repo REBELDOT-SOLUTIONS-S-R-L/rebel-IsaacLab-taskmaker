@@ -28,6 +28,9 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
+{% if cameras %}
+from isaaclab.sensors import CameraCfg
+{% endif %}
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 
@@ -168,6 +171,36 @@ def spawn_rigid_usd_sdf(
     return prim
 
 {% endif %}
+{% endif %}
+{% if cameras %}
+def attach_cameras(scene_cfg) -> None:
+    """Attach cameras to a {{ class_prefix }} scene cfg.
+
+    Kept as a module-level helper so the teleop launcher can re-attach the
+    cameras after IsaacLab's XR pipeline strips CameraCfg attributes via
+    ``remove_camera_configs``. Called from ``__post_init__`` for normal runs.
+    """
+{% for cam in cameras %}
+    scene_cfg.{{ cam.name }} = CameraCfg(
+        prim_path="{{ cam.prim_path }}",
+        update_period={{ cam.update_period }},
+        height={{ cam.height }},
+        width={{ cam.width }},
+        data_types={{ cam.data_types | pylist }},
+        spawn=sim_utils.PinholeCameraCfg(
+            focal_length={{ cam.focal_length }},
+            focus_distance={{ cam.focus_distance }},
+            horizontal_aperture={{ cam.horizontal_aperture }},
+            clipping_range=({{ cam.clipping_range }}),
+        ),
+        offset=CameraCfg.OffsetCfg(
+            pos=({{ cam.offset_pos }}),
+            rot=({{ cam.offset_rot }}),
+            convention="{{ cam.convention }}",
+        ),
+    )
+{% endfor %}
+
 {% endif %}
 # =====================================================================
 # 1) SCENE
@@ -467,7 +500,32 @@ class {{ class_prefix }}ObservationsCfg:
             self.enable_corruption = False
             self.concatenate_terms = False
 
+{% if subtask_signals %}
+    @configclass
+    class SubtaskTermsCfg(ObsGroup):
+        """Subtask termination signals consumed by the annotated-teleop recorder.
+
+        Each term returns a ``(num_envs, 1)`` binary float tensor that is ``1.0``
+        when the corresponding subtask is complete. ``BaseILEnv.get_subtask_term_predicates``
+        reads this group out of ``obs_buf["subtask_terms"]`` and feeds it to the
+        recorder's dwell-and-latch logic. The attribute names below must match
+        the ``subtask_term_signal`` values declared in
+        ``{{ task_name }}_mimic_cfg.py``.
+        """
+
+{% for sig in subtask_signals %}
+        {{ sig }} = ObsTerm(func=mdp.{{ sig }}, params={"signal_name": "{{ sig }}"})
+{% endfor %}
+
+        def __post_init__(self):
+            self.enable_corruption = False
+            self.concatenate_terms = False
+
+{% endif %}
     policy: PolicyCfg = PolicyCfg()
+{% if subtask_signals %}
+    subtask_terms: SubtaskTermsCfg = SubtaskTermsCfg()
+{% endif %}
 
 
 # =====================================================================
@@ -505,13 +563,75 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
 
     NUM_OPENXR_HAND_JOINTS = 26
 
+{% endif %}
     def __post_init__(self):
 {% if eef.names %}
         # EEF list — picked up by BaseILEnv methods and wired into the
-        # recorder's entity_order by BaseILEnvCfg.__post_init__.
+        # recorder's entity_order by BaseILEnvCfg.__post_init__. Set before
+        # super() so the base post-init sees it.
         self.eef_names = {{ eef.names | pylist }}
 {% endif %}
+{% if eef_slices %}
+
+        # Per-EEF action tensor layout — read by BaseILEnv to slice the action
+        # tensor produced by the {{ controller_type }} controller back into per-arm poses.
+        self.eef_action_slices = {
+{% for name, slc in eef_slices.action.items() %}
+            "{{ name }}": {"pos": ({{ slc.pos[0] }}, {{ slc.pos[1] }}), "quat": ({{ slc.quat[0] }}, {{ slc.quat[1] }})},
+{% endfor %}
+        }
+{% if eef_slices.gripper_mode == "contiguous" %}
+
+        # Contiguous gripper index ranges per EEF.
+        self.eef_gripper_slices = {
+{% for name, slc in eef_slices.gripper.items() %}
+            "{{ name }}": ({{ slc[0] }}, {{ slc[1] }}),
+{% endfor %}
+        }
+{% elif eef_slices.gripper_mode == "prefix" %}
+
+        # Per-arm finger-joint column indices. Interleaved-hand layouts (e.g.
+        # Inspire) split L/R fingers across `hand_joint_names`, so each arm's
+        # gripper slice is a *list of indices* rather than a contiguous range.
+        # Derived from the actual joint name order so reordering the YAML
+        # `hand_joint_names` stays correct.
+        _pose_offset = {{ eef_slices.pose_offset }}  # {{ eef_slices.num_eefs }} frame tasks * (3 + 4)
+        _hand_names = self.actions.pink_ik_cfg.hand_joint_names
+        self.eef_gripper_slices = {
+{% for name, prefix in eef_slices.prefixes.items() %}
+            "{{ name }}": [_pose_offset + i for i, n in enumerate(_hand_names) if n.startswith("{{ prefix }}")],
+{% endfor %}
+        }
+{% elif eef_slices.gripper_mode == "contiguous_fallback" %}
+
+        # TODO: declare `eef.hand_joint_prefixes` in the YAML so the generator
+        # can produce a robust per-arm gripper slice. The values below assume an
+        # even contiguous split, which only works if `hand_joint_names` is
+        # ordered [arm-0 joints..., arm-1 joints..., ...].
+        self.eef_gripper_slices = {
+{% for name, slc in eef_slices.gripper.items() %}
+            "{{ name }}": ({{ slc[0] }}, {{ slc[1] }}),
+{% endfor %}
+        }
+{% endif %}
+{% endif %}
+
         super().__post_init__()
+
+        # Sim defaults from the task YAML (override BaseILEnvCfg defaults).
+        self.decimation = {{ sim.decimation }}
+        self.episode_length_s = {{ sim.episode_length_s }}
+        self.sim.dt = {{ sim.dt }}
+        self.sim.render_interval = {{ sim.render_interval }}
+{% if cameras %}
+
+        # Cameras — attached to robot links. When running under XR teleop,
+        # IsaacLab's `remove_camera_configs` strips these before scene build;
+        # the patched teleop script can re-attach them by calling
+        # `attach_cameras(env_cfg.scene)` after the XR strip.
+        attach_cameras(self.scene)
+{% endif %}
+{% if controller_type == "pink_ik" %}
 
         # Convert USD to URDF for Pink IK
         temp_urdf_output_path, temp_urdf_meshes_output_path = ControllerUtils.convert_usd_to_urdf(
@@ -538,13 +658,6 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
             }
         )
 {% elif teleop.device in ["keyboard", "spacemouse", "gamepad"] %}
-    def __post_init__(self):
-{% if eef.names %}
-        # EEF list — picked up by BaseILEnv methods and wired into the
-        # recorder's entity_order by BaseILEnvCfg.__post_init__.
-        self.eef_names = {{ eef.names | pylist }}
-{% endif %}
-        super().__post_init__()
 
         # Teleop devices
         self.teleop_devices = DevicesCfg(
@@ -567,12 +680,4 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
 {% endif %}
             }
         )
-{% else %}
-    def __post_init__(self):
-{% if eef.names %}
-        # EEF list — picked up by BaseILEnv methods and wired into the
-        # recorder's entity_order by BaseILEnvCfg.__post_init__.
-        self.eef_names = {{ eef.names | pylist }}
-{% endif %}
-        super().__post_init__()
 {% endif %}

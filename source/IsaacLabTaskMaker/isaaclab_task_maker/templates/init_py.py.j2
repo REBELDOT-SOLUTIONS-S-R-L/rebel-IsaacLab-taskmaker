@@ -13,3 +13,14 @@ gym.register(
         "env_cfg_entry_point": f"{__name__}.{{ task_name }}_cfg:{{ class_prefix }}TaskCfg",
     },
 )
+{% if mimic is not none %}
+
+gym.register(
+    id="{{ mimic.mimic_task_id }}",
+    entry_point="{{ package_name }}.base_il_env.base_il_env:BaseILEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.{{ task_name }}_mimic_cfg:{{ class_prefix }}MimicEnvCfg",
+    },
+)
+{% endif %}

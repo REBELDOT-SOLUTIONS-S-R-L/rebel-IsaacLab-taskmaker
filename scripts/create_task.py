@@ -23,11 +23,11 @@ import subprocess
 import sys
 import sysconfig
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,34 @@ class EEFConfig(BaseModel):
     names: list[str] = []
     target_links: dict[str, str] = {}
     frame_names: dict[str, str] = {}
+    # Optional per-EEF prefix used to assign hand joints to arms when
+    # `ik_controller.hand_joint_names` interleaves them. Required for multi-EEF
+    # pink_ik tasks with hand joints (e.g. {"left": "L_", "right": "R_"} for the
+    # Inspire hand). Unused for single-EEF tasks.
+    hand_joint_prefixes: dict[str, str] = {}
+
+
+class CameraConfig(BaseModel):
+    """Pinhole camera attached to a robot link.
+
+    Emitted as ``scene.<name>`` and also re-attached after the XR pipeline strips
+    cameras (when running pink_ik teleop). Mirrors the upstream ``CameraCfg``
+    surface — only the fields commonly tweaked per-task are exposed here.
+    """
+
+    name: str
+    prim_path: str
+    update_period: float = 0.0
+    height: int = 480
+    width: int = 640
+    data_types: list[str] = ["rgb"]
+    focal_length: float = 12.0
+    focus_distance: float = 400.0
+    horizontal_aperture: float = 20.955
+    clipping_range: list[float] = [0.05, 10.0]
+    offset_pos: list[float] = [0.0, 0.0, 0.0]
+    offset_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
+    convention: str = "opengl"
 
 
 class TeleopConfig(BaseModel):
@@ -139,17 +167,47 @@ class SimConfig(BaseModel):
     env_spacing: float = 2.5
 
 
+class SubTaskSpec(BaseModel):
+    """A single SubTaskConfig entry. Extra keys are forwarded to SubTaskConfig as-is."""
+
+    model_config = ConfigDict(extra="allow")
+
+    object_ref: Optional[str] = None
+    subtask_term_signal: Optional[str] = None
+
+
+class MimicConfig(BaseModel):
+    """Optional Mimic data-generation configuration.
+
+    When present, create_task.py generates a `<task_name>_mimic_cfg.py` alongside
+    the task cfg and registers a sibling `<task_id>-Mimic` gym env.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    # When None, the mimic task_id defaults to `<task_id>-Mimic` in the context builder.
+    mimic_task_id: Optional[str] = None
+    # Free-form passthrough into self.datagen_config.<k> = <v>. Only keys present
+    # in this dict are emitted, so users can stay close to upstream IsaacLab examples
+    # without us hard-coding the full DataGenConfig schema.
+    datagen: dict[str, Any] = {}
+    # eef_name -> ordered list of SubTaskConfig entries.
+    subtasks: dict[str, list[SubTaskSpec]] = {}
+
+
 class TaskDefinition(BaseModel):
     task_name: str
     task_id: str
     robot: RobotConfig
     scene: SceneConfig = SceneConfig()
     scene_objects: list[SceneObject] = []
+    cameras: list[CameraConfig] = []
     ik_controller: IKControllerConfig = IKControllerConfig()
     eef: EEFConfig = EEFConfig()
     teleop: TeleopConfig = TeleopConfig()
     sim: SimConfig = SimConfig()
     observations: dict = {}
+    mimic: Optional[MimicConfig] = None
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +225,16 @@ def _pydict(d: dict) -> str:
     return "{" + inner + "}"
 
 
+def _pyrepr(value: Any) -> str:
+    """Jinja2 filter: format an arbitrary YAML-derived value as a Python literal.
+
+    Lists become Python lists, tuples stay tuples, dicts become dict literals,
+    None becomes ``None``, bools become ``True``/``False``. Used to forward
+    Mimic config values verbatim into the generated Python.
+    """
+    return repr(value)
+
+
 def _create_jinja_env() -> Environment:
     """Create and configure the Jinja2 template environment."""
     env = Environment(
@@ -178,6 +246,7 @@ def _create_jinja_env() -> Environment:
     )
     env.filters["pylist"] = _pylist
     env.filters["pydict"] = _pydict
+    env.filters["pyrepr"] = _pyrepr
     return env
 
 
@@ -270,6 +339,10 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
     has_baked_collision_objects = any(not o.use_default_sdf_collision for o in cfg.scene_objects)
     has_physics_materials = any(o.physics_material is not None for o in cfg.scene_objects)
 
+    eef_slices = _build_eef_slices(cfg)
+    cameras = _build_cameras_context(cfg)
+    subtask_signals = _build_subtask_signals(cfg)
+
     title = f"IL Task: {class_prefix}"
     description = f"Imitation-learning task extension for {class_prefix} ({cfg.task_id})"
 
@@ -295,11 +368,21 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "pos": _join_floats(cfg.scene.init_pos),
             "rot": _join_floats(cfg.scene.init_rot),
         },
+        "sim": {
+            "decimation": cfg.sim.decimation,
+            "episode_length_s": cfg.sim.episode_length_s,
+            "dt": cfg.sim.dt,
+            "render_interval": cfg.sim.render_interval,
+            "env_spacing": cfg.sim.env_spacing,
+        },
         "env_spacing": cfg.sim.env_spacing,
         "scene_objects": scene_objects,
+        "cameras": cameras,
         "has_sdf_objects": has_sdf_objects,
         "has_baked_collision_objects": has_baked_collision_objects,
         "has_physics_materials": has_physics_materials,
+        "eef_slices": eef_slices,
+        "subtask_signals": subtask_signals,
         "ik": {
             "controlled_joint_names": cfg.ik_controller.controlled_joint_names,
             "hand_joint_names": cfg.ik_controller.hand_joint_names,
@@ -328,6 +411,179 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "retargeter_import": cfg.teleop.retargeter_import,
             "retargeter_class": cfg.teleop.retargeter_class,
         },
+        "mimic": _build_mimic_context(cfg, class_prefix),
+    }
+
+
+def _build_eef_slices(cfg: TaskDefinition) -> Optional[dict]:
+    """Compute the per-EEF action/gripper tensor layout for the BaseILEnv.
+
+    Returns a dict consumed by ``skeleton_task_cfg.py.j2`` to emit
+    ``self.eef_action_slices`` and ``self.eef_gripper_slices`` inside the
+    generated ``__post_init__``. Returns ``None`` for joint-space controllers,
+    which don't have pose-shaped actions for BaseILEnv to slice.
+    """
+    controller_type = cfg.ik_controller.controller_type
+    eef_names = list(cfg.eef.names)
+    if not eef_names:
+        return None
+
+    if controller_type == "pink_ik":
+        # Action tensor layout (per `PinkInverseKinematicsActionCfg`):
+        #     [pos(3), quat(4)] per EEF (in `frame_names` order), then `hand_joint_names`.
+        action = {}
+        for i, name in enumerate(eef_names):
+            base = i * 7
+            action[name] = {"pos": (base, base + 3), "quat": (base + 3, base + 7)}
+
+        pose_offset = len(eef_names) * 7
+        hand_joint_names = cfg.ik_controller.hand_joint_names
+
+        if not hand_joint_names:
+            return {"action": action, "gripper_mode": None}
+
+        if len(eef_names) == 1:
+            name = eef_names[0]
+            return {
+                "action": action,
+                "gripper_mode": "contiguous",
+                "gripper": {name: (pose_offset, pose_offset + len(hand_joint_names))},
+            }
+
+        prefixes = cfg.eef.hand_joint_prefixes
+        if prefixes:
+            missing = [n for n in eef_names if n not in prefixes]
+            if missing:
+                raise ValueError(
+                    f"eef.hand_joint_prefixes is missing entries for {missing}; "
+                    f"multi-EEF pink_ik tasks need a prefix per arm."
+                )
+            return {
+                "action": action,
+                "gripper_mode": "prefix",
+                "pose_offset": pose_offset,
+                "num_eefs": len(eef_names),
+                "prefixes": {name: prefixes[name] for name in eef_names},
+            }
+
+        # Multi-EEF without prefixes — fall back to splitting evenly and warn
+        # in the generated code via a TODO comment.
+        per_arm = len(hand_joint_names) // len(eef_names)
+        gripper = {
+            name: (pose_offset + i * per_arm, pose_offset + (i + 1) * per_arm)
+            for i, name in enumerate(eef_names)
+        }
+        return {
+            "action": action,
+            "gripper_mode": "contiguous_fallback",
+            "gripper": gripper,
+        }
+
+    if controller_type in ("differential_ik", "operational_space", "rmpflow"):
+        # Single-arm pose-space controllers: [pos(3), quat(4)] then optional
+        # contiguous gripper joints.
+        if len(eef_names) != 1:
+            # Multi-arm not supported for these controllers in the action cfg
+            # block above — skip emitting slices.
+            return None
+        name = eef_names[0]
+        action = {name: {"pos": (0, 3), "quat": (3, 7)}}
+        hand_joint_names = cfg.ik_controller.hand_joint_names
+        if not hand_joint_names:
+            return {"action": action, "gripper_mode": None}
+        return {
+            "action": action,
+            "gripper_mode": "contiguous",
+            "gripper": {name: (7, 7 + len(hand_joint_names))},
+        }
+
+    # joint_position / relative_joint_position / joint_velocity / joint_effort
+    # operate directly in joint space — no pose slices to emit.
+    return None
+
+
+def _build_cameras_context(cfg: TaskDefinition) -> list[dict]:
+    """Render cameras into a Jinja-friendly form (floats joined, lists kept)."""
+    out: list[dict] = []
+    for cam in cfg.cameras:
+        out.append({
+            "name": cam.name,
+            "prim_path": cam.prim_path,
+            "update_period": cam.update_period,
+            "height": cam.height,
+            "width": cam.width,
+            "data_types": list(cam.data_types),
+            "focal_length": cam.focal_length,
+            "focus_distance": cam.focus_distance,
+            "horizontal_aperture": cam.horizontal_aperture,
+            "clipping_range": _join_floats(cam.clipping_range),
+            "offset_pos": _join_floats(cam.offset_pos),
+            "offset_rot": _join_floats(cam.offset_rot),
+            "convention": cam.convention,
+        })
+    return out
+
+
+def _build_subtask_signals(cfg: TaskDefinition) -> list[str]:
+    """Collect the unique ordered subtask_term_signal names across all EEFs.
+
+    The terminal ``None`` entries (representing "run until end of demo") are
+    skipped — no MDP predicate is needed for them.
+    """
+    if cfg.mimic is None:
+        return []
+    seen: dict[str, None] = {}
+    for entries in cfg.mimic.subtasks.values():
+        for entry in entries:
+            sig = entry.subtask_term_signal
+            if sig and sig not in seen:
+                seen[sig] = None
+    return list(seen.keys())
+
+
+# SubTaskConfig fields that are declared as tuples upstream. YAML reads them as
+# lists, so coerce them so the generated Python keeps the tuple syntax that
+# matches the upstream IsaacLab examples.
+_TUPLE_SUBTASK_FIELDS = (
+    "first_subtask_start_offset_range",
+    "subtask_start_offset_range",
+    "subtask_term_offset_range",
+)
+
+
+def _build_mimic_context(cfg: TaskDefinition, class_prefix: str) -> Optional[dict]:
+    """Build the Mimic section of the Jinja context, or return None if no mimic config."""
+    if cfg.mimic is None:
+        return None
+
+    mimic_task_id = cfg.mimic.mimic_task_id or f"{cfg.task_id}-Mimic"
+
+    # Render datagen kv pairs as (key, python-literal) so the template can emit
+    # `self.datagen_config.<k> = <v>` without needing per-field knowledge.
+    datagen_items = [(k, repr(v)) for k, v in cfg.mimic.datagen.items()]
+
+    subtasks: dict[str, list[list[tuple[str, str]]]] = {}
+    for eef_name, entries in cfg.mimic.subtasks.items():
+        rendered_entries: list[list[tuple[str, str]]] = []
+        for entry in entries:
+            raw = entry.model_dump()
+            # Drop unset Nones so the generated code only mentions fields the
+            # user actually specified.
+            kv: list[tuple[str, str]] = []
+            for k, v in raw.items():
+                if v is None and k not in ("object_ref", "subtask_term_signal"):
+                    continue
+                if k in _TUPLE_SUBTASK_FIELDS and isinstance(v, list):
+                    v = tuple(v)
+                kv.append((k, repr(v)))
+            rendered_entries.append(kv)
+        subtasks[eef_name] = rendered_entries
+
+    return {
+        "mimic_task_id": mimic_task_id,
+        "class_prefix": class_prefix,
+        "datagen_items": datagen_items,
+        "subtasks": subtasks,
     }
 
 
@@ -341,6 +597,7 @@ SCRIPTS_TO_PATCH = {
     "scripts/environments/teleoperation/teleop_se3_agent.py": "scripts/teleop.py",
     "scripts/environments/random_agent.py": "scripts/random_agent.py",
     "scripts/environments/zero_agent.py": "scripts/zero_agent.py",
+    "scripts/tools/record_annotated_demos.py": "scripts/record_annotated_demos.py",
 }
 
 
@@ -522,6 +779,12 @@ def generate_extension_project(
         jinja_env.get_template("skeleton_task_cfg.py.j2").render(context),
         dry_run,
     )
+    if context["mimic"] is not None:
+        _write(
+            task_dir / f"{task_name}_mimic_cfg.py",
+            jinja_env.get_template("mimic_env_cfg.py.j2").render(context),
+            dry_run,
+        )
     _write(
         mdp_dir / "__init__.py",
         jinja_env.get_template("mdp_init.py.j2").render(context),

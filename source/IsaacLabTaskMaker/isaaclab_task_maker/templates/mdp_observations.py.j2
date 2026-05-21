@@ -10,6 +10,23 @@ in your task config's ObservationsCfg.
 
 Base observations (get_eef_pos, get_eef_quat, object_obs, get_robot_joint_state,
 get_all_robot_link_state) are already available from the base_il_env mdp.
+{% if subtask_signals %}
+
+This module also defines the **subtask termination signals** that the Mimic
+data generation pipeline uses to slice a demonstration into reusable segments.
+Each signal returns a ``(num_envs, 1)`` float tensor that is ``1.0`` when the
+associated subtask is complete for that env and ``0.0`` otherwise.
+
+The signals are wired into the Mimic recorder via the ``SubtaskTermsCfg``
+observation group (group name ``subtask_terms``) in ``{{ task_name }}_cfg.py``,
+read out by ``BaseILEnv.get_subtask_term_predicates``, and referenced by name
+from ``{{ task_name }}_mimic_cfg.py``'s ``SubTaskConfig`` entries.
+
+The bodies are auto-generated stubs that always return zeros — fill them in
+once you have a feel for the geometry of the task (see lego_g1's
+``grasp_brick_done`` / ``move_brick_done`` / ``release_brick_done`` /
+``idle_done`` in its ``mdp/observations.py`` for reference patterns).
+{% endif %}
 """
 
 from __future__ import annotations
@@ -22,7 +39,27 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+{% if subtask_signals %}
+# ---------------------------------------------------------------------------
+# Subtask termination signals (subtask_terms observation group)
+# ---------------------------------------------------------------------------
+{% for sig in subtask_signals %}
+def {{ sig }}(
+    env: "ManagerBasedRLEnv",
+    signal_name: str | None = None,
+) -> torch.Tensor:
+    """TODO: implement the ``{{ sig }}`` subtask predicate.
+
+    Should return a ``(num_envs, 1)`` tensor that is ``1.0`` when the subtask
+    is complete and ``0.0`` otherwise.
+    """
+    return torch.zeros(env.num_envs, 1, device=env.device)
+
+
+{% endfor %}
+{% else %}
 # Example: uncomment and customize
 # def my_custom_observation(env: ManagerBasedRLEnv) -> torch.Tensor:
 #     """Compute a task-specific observation."""
 #     return torch.zeros(env.num_envs, 1, device=env.device)
+{% endif %}
