@@ -500,7 +500,7 @@ class {{ class_prefix }}ObservationsCfg:
             self.enable_corruption = False
             self.concatenate_terms = False
 
-{% if subtask_signals %}
+{% if subtask_terms.signals %}
     @configclass
     class SubtaskTermsCfg(ObsGroup):
         """Subtask termination signals consumed by the annotated-teleop recorder.
@@ -513,8 +513,19 @@ class {{ class_prefix }}ObservationsCfg:
         ``{{ task_name }}_mimic_cfg.py``.
         """
 
-{% for sig in subtask_signals %}
-        {{ sig }} = ObsTerm(func=mdp.{{ sig }}, params={"signal_name": "{{ sig }}"})
+{% for sig in subtask_terms.signals %}
+{% if sig.params | length > 1 %}
+        {{ sig.name }} = ObsTerm(
+            func=mdp.{{ sig.func }},
+            params={
+{% for k, v in sig.params %}
+                "{{ k }}": {{ v }},
+{% endfor %}
+            },
+        )
+{% else %}
+        {{ sig.name }} = ObsTerm(func=mdp.{{ sig.func }}, params={"signal_name": "{{ sig.name }}"})
+{% endif %}
 {% endfor %}
 
         def __post_init__(self):
@@ -523,7 +534,7 @@ class {{ class_prefix }}ObservationsCfg:
 
 {% endif %}
     policy: PolicyCfg = PolicyCfg()
-{% if subtask_signals %}
+{% if subtask_terms.signals %}
     subtask_terms: SubtaskTermsCfg = SubtaskTermsCfg()
 {% endif %}
 
@@ -557,8 +568,8 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
 
 {% if controller_type == "pink_ik" %}
     xr: XrCfg = XrCfg(
-        anchor_pos=(0.0, 0.0, 0.0),
-        anchor_rot=(1.0, 0.0, 0.0, 0.0),
+        anchor_pos=({{ teleop.xr_anchor_pos }}),
+        anchor_rot=({{ teleop.xr_anchor_rot }}),
     )
 
     NUM_OPENXR_HAND_JOINTS = 26

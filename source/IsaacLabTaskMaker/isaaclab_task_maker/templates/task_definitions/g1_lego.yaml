@@ -246,6 +246,13 @@ teleop:
   device: handtracking
   retargeter_import: isaaclab.devices.openxr.retargeters.humanoid.unitree.inspire.g1_upper_body_retargeter
   retargeter_class: UnitreeG1RetargeterCfg
+  # XR anchor placement (pink_ik only). The anchor positions the operator's
+  # tracking-space origin in world coordinates so their hands land near the
+  # robot's wrists. Default is identity, which only works for robots at the
+  # origin — for G1 (robot at -1.05, 0, 0.8) we offset the anchor so the
+  # tracking space sits below the robot's pelvis.
+  xr_anchor_pos: [-1.05, 0.0, -0.3]
+  xr_anchor_rot: [1.0, 0.0, 0.0, 0.0]
 
 
 # ─── SIMULATION ──────────────────────────────────────────────
@@ -260,6 +267,75 @@ sim:
   dt: 0.008333
   render_interval: 2
   env_spacing: 2.5
+
+
+# ─── SUBTASK TERM PREDICATES (optional) ──────────────────────
+# Declarative binding from `subtask_term_signal` name to the MDP function +
+# params that compute it. Letting multiple signals share one function keeps
+# the generated `mdp/observations.py` DRY — a single `grasp_brick_done`
+# backs both `grasp_brick_left` and `grasp_brick_right` ObsTerms below.
+#
+# Each entry:
+#   func:   MDP function name. Defaults to the signal name if omitted, in
+#           which case the generator emits a one-stub-per-signal layout.
+#   params: kwargs passed to the function. The signal name is added
+#           automatically. Parameter types are inferred from the value
+#           (str / int / float / tuple[float, ...]) and used to type the
+#           generated stub's signature; refine the types after generation
+#           if the inference picks something less specific than you want.
+subtask_terms:
+  grasp_brick_left:
+    func: grasp_brick_done
+    params:
+      eef_link: left_wrist_yaw_link
+      object_name: brick_2x2_1
+      dist_threshold: 0.25
+      gripper_joint_pattern: "L_.*_proximal_joint"
+      gripper_closed_threshold: 1.3
+  move_brick_left:
+    func: move_brick_done
+    params:
+      eef_link: left_wrist_yaw_link
+      object_name: brick_2x2_1
+      target_pos: [-0.4, 0.05, 0.83]
+      eef_dist_threshold: 0.25
+      target_dist_threshold: 0.34
+      gripper_joint_pattern: "L_.*_proximal_joint"
+      gripper_closed_threshold: 1.3
+  release_brick_left:
+    func: release_brick_done
+    params:
+      object_name: brick_2x2_1
+      target_pos: [-0.4, 0.05, 0.83]
+      target_dist_threshold: 0.34
+      gripper_joint_pattern: "L_.*_proximal_joint"
+      gripper_open_threshold: 0.15
+  grasp_brick_right:
+    func: grasp_brick_done
+    params:
+      eef_link: right_wrist_yaw_link
+      object_name: brick_2x2
+      dist_threshold: 0.25
+      gripper_joint_pattern: "R_.*_proximal_joint"
+      gripper_closed_threshold: 1.3
+  move_brick_right:
+    func: move_brick_done
+    params:
+      eef_link: right_wrist_yaw_link
+      object_name: brick_2x2
+      target_pos: [-0.4, -0.05, 0.83]
+      eef_dist_threshold: 0.25
+      target_dist_threshold: 0.34
+      gripper_joint_pattern: "R_.*_proximal_joint"
+      gripper_closed_threshold: 1.3
+  release_brick_right:
+    func: release_brick_done
+    params:
+      object_name: brick_2x2
+      target_pos: [-0.4, -0.05, 0.83]
+      target_dist_threshold: 0.34
+      gripper_joint_pattern: "R_.*_proximal_joint"
+      gripper_open_threshold: 0.15
 
 
 # ─── MIMIC DATA GENERATION (optional) ────────────────────────

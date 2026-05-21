@@ -10,7 +10,7 @@ in your task config's ObservationsCfg.
 
 Base observations (get_eef_pos, get_eef_quat, object_obs, get_robot_joint_state,
 get_all_robot_link_state) are already available from the base_il_env mdp.
-{% if subtask_signals %}
+{% if subtask_terms.funcs %}
 
 This module also defines the **subtask termination signals** that the Mimic
 data generation pipeline uses to slice a demonstration into reusable segments.
@@ -39,16 +39,23 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-{% if subtask_signals %}
+{% if subtask_terms.funcs %}
 # ---------------------------------------------------------------------------
 # Subtask termination signals (subtask_terms observation group)
 # ---------------------------------------------------------------------------
-{% for sig in subtask_signals %}
-def {{ sig }}(
+{% for fn in subtask_terms.funcs %}
+def {{ fn.name }}(
     env: "ManagerBasedRLEnv",
+{% for p in fn.params %}
+{% if p.type %}
+    {{ p.name }}: {{ p.type }},
+{% else %}
+    {{ p.name }},
+{% endif %}
+{% endfor %}
     signal_name: str | None = None,
 ) -> torch.Tensor:
-    """TODO: implement the ``{{ sig }}`` subtask predicate.
+    """TODO: implement the ``{{ fn.name }}`` subtask predicate.
 
     Should return a ``(num_envs, 1)`` tensor that is ``1.0`` when the subtask
     is complete and ``0.0`` otherwise.

@@ -157,6 +157,12 @@ class TeleopConfig(BaseModel):
     device: Optional[str] = None  # default depends on controller type
     retargeter_import: str = "isaaclab.devices"
     retargeter_class: str = "RetargeterCfg"
+    # OpenXR anchor placement (pink_ik tasks only). Positions the operator's
+    # tracking-space origin relative to the world frame so their hands land near
+    # the robot's wrists. Both default to identity for backward compatibility,
+    # but anything other than a robot sitting at (0, 0, 0) needs these set.
+    xr_anchor_pos: list[float] = [0.0, 0.0, 0.0]
+    xr_anchor_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
 
 
 class SimConfig(BaseModel):
@@ -174,6 +180,19 @@ class SubTaskSpec(BaseModel):
 
     object_ref: Optional[str] = None
     subtask_term_signal: Optional[str] = None
+
+
+class SubtaskTermSpec(BaseModel):
+    """Declarative binding for a subtask_term_signal predicate.
+
+    Lets multiple signals share one MDP function differentiated by params (so
+    a single ``grasp_brick_done`` can back both ``grasp_brick_left`` and
+    ``grasp_brick_right`` ObsTerms). If ``func`` is omitted it defaults to the
+    signal name, preserving the one-function-per-signal stub layout.
+    """
+
+    func: Optional[str] = None
+    params: dict[str, Any] = {}
 
 
 class MimicConfig(BaseModel):
@@ -208,6 +227,11 @@ class TaskDefinition(BaseModel):
     sim: SimConfig = SimConfig()
     observations: dict = {}
     mimic: Optional[MimicConfig] = None
+    # Optional binding from subtask_term_signal name to a (function, params)
+    # pair. Used to flesh out the SubtaskTermsCfg ObsTerms and the MDP stub
+    # signatures. When omitted, each declared signal gets its own zero-stub
+    # function and an ObsTerm with only the signal_name param.
+    subtask_terms: dict[str, SubtaskTermSpec] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -341,7 +365,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
 
     eef_slices = _build_eef_slices(cfg)
     cameras = _build_cameras_context(cfg)
-    subtask_signals = _build_subtask_signals(cfg)
+    subtask_terms = _build_subtask_signal_context(cfg)
 
     title = f"IL Task: {class_prefix}"
     description = f"Imitation-learning task extension for {class_prefix} ({cfg.task_id})"
@@ -382,7 +406,6 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
         "has_baked_collision_objects": has_baked_collision_objects,
         "has_physics_materials": has_physics_materials,
         "eef_slices": eef_slices,
-        "subtask_signals": subtask_signals,
         "ik": {
             "controlled_joint_names": cfg.ik_controller.controlled_joint_names,
             "hand_joint_names": cfg.ik_controller.hand_joint_names,
@@ -410,7 +433,10 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "device": teleop_device,
             "retargeter_import": cfg.teleop.retargeter_import,
             "retargeter_class": cfg.teleop.retargeter_class,
+            "xr_anchor_pos": _join_floats(cfg.teleop.xr_anchor_pos),
+            "xr_anchor_rot": _join_floats(cfg.teleop.xr_anchor_rot),
         },
+        "subtask_terms": subtask_terms,
         "mimic": _build_mimic_context(cfg, class_prefix),
     }
 
@@ -524,21 +550,133 @@ def _build_cameras_context(cfg: TaskDefinition) -> list[dict]:
     return out
 
 
-def _build_subtask_signals(cfg: TaskDefinition) -> list[str]:
-    """Collect the unique ordered subtask_term_signal names across all EEFs.
+def _infer_param_type(value: Any) -> Optional[str]:
+    """Best-effort Python type annotation for a YAML-derived value.
 
-    The terminal ``None`` entries (representing "run until end of demo") are
-    skipped — no MDP predicate is needed for them.
+    Returns ``None`` when no useful annotation can be inferred — the generator
+    then emits the parameter without a type hint, which the user can refine.
+    """
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int"
+    if isinstance(value, float):
+        return "float"
+    if isinstance(value, str):
+        return "str"
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return None
+        inner_types = {type(v) for v in value}
+        if inner_types == {bool}:
+            return "tuple[bool, ...]"
+        if inner_types <= {int, float} and inner_types != {bool}:
+            return "tuple[float, ...]"
+        if inner_types == {str}:
+            return "tuple[str, ...]"
+        return None
+    return None
+
+
+def _py_value(value: Any) -> str:
+    """Render a YAML-derived value as a Python literal.
+
+    Numeric lists are upgraded to tuples so they line up with the
+    ``tuple[float, ...]`` annotation produced by ``_infer_param_type``.
+    """
+    if isinstance(value, list) and value:
+        inner_types = {type(v) for v in value}
+        if inner_types <= {int, float} and inner_types != {bool}:
+            return repr(tuple(value))
+    return repr(value)
+
+
+def _build_subtask_signal_context(cfg: TaskDefinition) -> dict[str, Any]:
+    """Build the subtask-signal context block for the templates.
+
+    Output shape::
+
+        {
+            "signals": [
+                {
+                    "name": "grasp_brick_left",
+                    "func": "grasp_brick_done",
+                    "params": [("eef_link", "'left_wrist_yaw_link'"), ...],
+                },
+                ...
+            ],
+            "funcs": [
+                {
+                    "name": "grasp_brick_done",
+                    "params": [{"name": "eef_link", "type": "str"}, ...],
+                },
+                ...
+            ],
+        }
+
+    ``signals`` is the unique ordered list of ``subtask_term_signal`` values
+    declared on ``mimic.subtasks`` (terminal ``None`` entries are skipped).
+    For each signal, ``params`` are pre-rendered ``(key, py_literal)`` pairs
+    that include ``signal_name`` plus any user-supplied entries from
+    ``subtask_terms``.
+
+    ``funcs`` is the unique set of underlying MDP function names; each carries
+    the merged set of parameter names with inferred types so the stub
+    generator can emit a single function whose signature accepts every param
+    used by any signal pointing at it.
     """
     if cfg.mimic is None:
-        return []
-    seen: dict[str, None] = {}
+        return {"signals": [], "funcs": []}
+
+    ordered_signals: list[str] = []
+    seen: set[str] = set()
     for entries in cfg.mimic.subtasks.values():
         for entry in entries:
             sig = entry.subtask_term_signal
             if sig and sig not in seen:
-                seen[sig] = None
-    return list(seen.keys())
+                seen.add(sig)
+                ordered_signals.append(sig)
+
+    signals_out: list[dict[str, Any]] = []
+    func_params: dict[str, dict[str, Optional[str]]] = {}
+    func_order: list[str] = []
+
+    for sig in ordered_signals:
+        binding = cfg.subtask_terms.get(sig)
+        func_name = (binding.func if binding and binding.func else sig)
+        user_params = (binding.params if binding else {}) or {}
+
+        signal_params: list[tuple[str, str]] = [("signal_name", repr(sig))]
+        for k, v in user_params.items():
+            signal_params.append((k, _py_value(v)))
+        signals_out.append({
+            "name": sig,
+            "func": func_name,
+            "params": signal_params,
+        })
+
+        if func_name not in func_params:
+            func_params[func_name] = {}
+            func_order.append(func_name)
+        merged = func_params[func_name]
+        for k, v in user_params.items():
+            inferred = _infer_param_type(v)
+            existing = merged.get(k)
+            # First declaration wins; later signals only fill in a type that
+            # was previously unknown.
+            if k not in merged:
+                merged[k] = inferred
+            elif existing is None and inferred is not None:
+                merged[k] = inferred
+
+    funcs_out: list[dict[str, Any]] = []
+    for fn in func_order:
+        params_def: list[dict[str, Optional[str]]] = [
+            {"name": name, "type": ty} for name, ty in func_params[fn].items()
+        ]
+        funcs_out.append({"name": fn, "params": params_def})
+
+    return {"signals": signals_out, "funcs": funcs_out}
 
 
 # SubTaskConfig fields that are declared as tuples upstream. YAML reads them as
@@ -621,10 +759,120 @@ def _patch_script(content: str, package_name: str) -> str:
     return content
 
 
+def _patch_teleop_script(
+    content: str,
+    package_name: str,
+    task_name: str,
+    has_cameras: bool,
+) -> str:
+    """Customize the upstream teleop script for the generated task.
+
+    Adds ``--dataset_dir`` / ``--dataset_file`` CLI args, wires those into the
+    recorder, removes the upstream ``terminations.time_out = None`` line so
+    episodes auto-reset at ``episode_length_s``, and (when cameras are
+    configured) re-attaches them after IsaacLab's XR pipeline strips them via
+    ``remove_camera_configs``.
+    """
+    content = _patch_script(content, package_name)
+
+    # CLI args after --task.
+    task_arg = 'parser.add_argument("--task", type=str, default=None, help="Name of the task.")'
+    dataset_args = (
+        f'{task_arg}\n'
+        f'parser.add_argument(\n'
+        f'    "--dataset_dir",\n'
+        f'    type=str,\n'
+        f'    default="./datasets/{task_name}",\n'
+        f'    help="Directory where the recorded HDF5 dataset will be written.",\n'
+        f')\n'
+        f'parser.add_argument(\n'
+        f'    "--dataset_file",\n'
+        f'    type=str,\n'
+        f'    default="dataset",\n'
+        f'    help="Filename (without extension) for the recorded dataset.",\n'
+        f')'
+    )
+    content = content.replace(task_arg, dataset_args, 1)
+
+    # Keep the time_out termination so the env auto-resets at episode_length_s.
+    content = content.replace(
+        "    # modify configuration\n    env_cfg.terminations.time_out = None\n",
+        "",
+        1,
+    )
+
+    # Camera re-attach after XR strip + recorder path plumbing.
+    xr_anchor = (
+        '    if args_cli.xr:\n'
+        '        env_cfg = remove_camera_configs(env_cfg)\n'
+        '        env_cfg.sim.render.antialiasing_mode = "DLSS"\n'
+    )
+    if xr_anchor in content:
+        replacement_lines = [xr_anchor.rstrip("\n")]
+        if has_cameras:
+            replacement_lines.append(
+                "        # Re-attach cameras after the XR strip — upstream removes\n"
+                "        # them because the XR compositor can fight with replicator\n"
+                "        # over the RTX render queue.\n"
+                "        attach_cameras(env_cfg.scene)"
+            )
+        replacement_lines.append(
+            "\n    # Override the recorder's per-run dataset target. The recorder\n"
+            "    # itself, entity_order, and eef_names are set by BaseILEnvCfg.\n"
+            "    env_cfg.recorders.dataset_export_dir_path = args_cli.dataset_dir\n"
+            "    env_cfg.recorders.dataset_filename = args_cli.dataset_file\n"
+        )
+        content = content.replace(xr_anchor, "\n".join(replacement_lines) + "\n", 1)
+
+    # attach_cameras import (after the package import that _patch_script just
+    # injected).
+    if has_cameras:
+        pkg_import = f"import {package_name}  # noqa: F401"
+        attach_import = (
+            f"from {package_name}.tasks.manager_based.{task_name}.{task_name}_cfg "
+            f"import attach_cameras"
+        )
+        if pkg_import in content and attach_import not in content:
+            content = content.replace(
+                pkg_import,
+                f"{pkg_import}\n{attach_import}",
+                1,
+            )
+
+    return content
+
+
+def _patch_record_annotated_demos(content: str, package_name: str) -> str:
+    """Patch the upstream annotated-demo recorder.
+
+    Publishes the per-EEF queue heads as ``env._debug_subtask_heads`` so
+    subtask predicates in ``mdp/observations.py`` can gate any debug printing
+    on the signal each EEF is currently dwelling on.
+    """
+    content = _patch_script(content, package_name)
+
+    anchor = "                _, _, terminated, truncated, _ = env.step(action)"
+    inject = (
+        "                # Publish the current queue heads so subtask\n"
+        "                # observation functions only print debug info for\n"
+        "                # the signal each EEF is actively waiting on.\n"
+        "                env._debug_subtask_heads = {\n"
+        "                    signal for signal in annotator.current_signal_heads().values()\n"
+        "                    if signal is not None\n"
+        "                }\n"
+    )
+    if anchor in content and "env._debug_subtask_heads" not in content:
+        content = content.replace(anchor, inject + anchor, 1)
+
+    return content
+
+
 def copy_isaaclab_scripts(
     isaaclab_path: Path,
     project_dir: Path,
     package_name: str,
+    task_name: str,
+    has_cameras: bool,
     dry_run: bool = False,
 ) -> None:
     """Copy and patch IsaacLab scripts into the generated project."""
@@ -634,7 +882,13 @@ def copy_isaaclab_scripts(
         if not src.is_file():
             print(f"  WARNING: Script not found, skipping: {src}")
             continue
-        patched = _patch_script(src.read_text(), package_name)
+        raw = src.read_text()
+        if dst_rel == "scripts/teleop.py":
+            patched = _patch_teleop_script(raw, package_name, task_name, has_cameras)
+        elif dst_rel == "scripts/record_annotated_demos.py":
+            patched = _patch_record_annotated_demos(raw, package_name)
+        else:
+            patched = _patch_script(raw, package_name)
         _write(dst, patched, dry_run, label=dst_rel)
 
 
@@ -809,7 +1063,14 @@ def generate_extension_project(
     # ----- 7) Copy & patch IsaacLab scripts -----
     if isaaclab_path is not None:
         print("  [7/7] IsaacLab scripts (with extension import)...")
-        copy_isaaclab_scripts(isaaclab_path, project_dir, package_name, dry_run)
+        copy_isaaclab_scripts(
+            isaaclab_path,
+            project_dir,
+            package_name,
+            task_name,
+            has_cameras=bool(context["cameras"]),
+            dry_run=dry_run,
+        )
     else:
         print("  [7/7] Skipped IsaacLab scripts (--isaaclab-path not provided)")
 
