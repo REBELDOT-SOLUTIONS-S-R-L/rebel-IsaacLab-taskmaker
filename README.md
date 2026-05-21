@@ -10,7 +10,7 @@ writing boilerplate.
 
 ```bash
 python scripts/create_task.py templates/task_definitions/g1_lego.yaml
-# → ./lego_g1/  (a full, installable IL extension)
+# → ./examples/lego_g1/  (a full, installable IL extension)
 ```
 
 ---
@@ -77,7 +77,7 @@ The script prints the exact next steps. In short:
 ```bash
 # 1. Drop your USD assets into the printed scene/objects/robots folders.
 # 2. Install the generated extension (writes a .pth that auto-registers gyms).
-pip install -e lego_g1/source/lego_g1
+pip install -e examples/lego_g1/source/lego_g1
 
 # 3. Run any stock IsaacLab script against the task.
 cd <IsaacLab-dir>

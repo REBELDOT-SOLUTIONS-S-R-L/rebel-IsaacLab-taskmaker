@@ -5,7 +5,7 @@ Auto-generated IsaacLab IL extension for the **IL-LEGO-G1-v0** task.
 ## Installation
 
 ```bash
-cd lego_g1
+cd examples/lego_g1
 pip install -e source/lego_g1
 ```
 
@@ -13,10 +13,10 @@ pip install -e source/lego_g1
 
 ```bash
 # Run with teleoperation (using the included script)
-./isaaclab.sh -p lego_g1/scripts/teleop.py --task IL-LEGO-G1-v0
+./isaaclab.sh -p examples/lego_g1/scripts/teleop.py --task IL-LEGO-G1-v0
 
 # Or run with random actions
-./isaaclab.sh -p lego_g1/scripts/random_agent.py --task IL-LEGO-G1-v0
+./isaaclab.sh -p examples/lego_g1/scripts/random_agent.py --task IL-LEGO-G1-v0
 ```
 
 If the `scripts/` directory was not generated (no `--isaaclab-path` was provided),
