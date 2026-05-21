@@ -636,11 +636,12 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
         self.sim.render_interval = {{ sim.render_interval }}
 {% if cameras %}
 
-        # Cameras — attached to robot links. When running under XR teleop,
-        # IsaacLab's `remove_camera_configs` strips these before scene build;
-        # the patched teleop script can re-attach them by calling
-        # `attach_cameras(env_cfg.scene)` after the XR strip.
+        # Cameras — attached to robot links. Under XR teleop, IsaacLab's
+        # `remove_camera_configs` strips these before scene build; the
+        # `xr_camera_reattach` hook lets the teleop script put them back
+        # before `gym.make` runs.
         attach_cameras(self.scene)
+        self.xr_camera_reattach = attach_cameras
 {% endif %}
 {% if controller_type == "pink_ik" %}
 

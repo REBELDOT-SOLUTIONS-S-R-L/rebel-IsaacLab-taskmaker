@@ -7,11 +7,14 @@
 """Generate a standalone IsaacLab extension project from a YAML task definition.
 
 The generated project is self-contained and can be installed into IsaacLab
-with ``pip install -e source/<task_name>``.
+with ``pip install -e source/<task_name>``. The install writes a ``.pth`` file
+that auto-imports the extension package on Python startup, so IsaacLab's stock
+launch scripts (teleop_se3_agent, record_annotated_demos, random_agent,
+zero_agent) can find the registered gym envs without any per-task customization.
 
 Usage:
-    python scripts/create_task.py example.yaml --isaaclab-path ~/isaac/IsaacLab
-    python scripts/create_task.py example.yaml --isaaclab-path ~/isaac/IsaacLab --output-dir ~/my_tasks
+    python scripts/create_task.py example.yaml
+    python scripts/create_task.py example.yaml --output-dir ~/my_tasks
     python scripts/create_task.py example.yaml --dry-run
 """
 
@@ -726,179 +729,11 @@ def _build_mimic_context(cfg: TaskDefinition, class_prefix: str) -> Optional[dic
 
 
 # ---------------------------------------------------------------------------
-# Script copying (from IsaacLab, with extension import injected)
-# ---------------------------------------------------------------------------
-IMPORT_LINE = "import isaaclab_tasks  # noqa: F401"
-PLACEHOLDER_LINE = "# PLACEHOLDER: Extension template (do not remove this comment)"
-
-SCRIPTS_TO_PATCH = {
-    "scripts/environments/teleoperation/teleop_se3_agent.py": "scripts/teleop.py",
-    "scripts/environments/random_agent.py": "scripts/random_agent.py",
-    "scripts/environments/zero_agent.py": "scripts/zero_agent.py",
-    "scripts/tools/record_annotated_demos.py": "scripts/record_annotated_demos.py",
-}
-
-
-def _patch_script(content: str, package_name: str) -> str:
-    """Inject ``import <package_name>`` into an IsaacLab script.
-
-    For scripts with a PLACEHOLDER comment, replace it.
-    For scripts without one (e.g. teleop), insert after ``import isaaclab_tasks``.
-    """
-    ext_import = f"import {package_name}  # noqa: F401"
-
-    if PLACEHOLDER_LINE in content:
-        return content.replace(PLACEHOLDER_LINE, ext_import)
-
-    if IMPORT_LINE in content:
-        return content.replace(
-            IMPORT_LINE,
-            f"{IMPORT_LINE}\n{ext_import}",
-        )
-
-    return content
-
-
-def _patch_teleop_script(
-    content: str,
-    package_name: str,
-    task_name: str,
-    has_cameras: bool,
-) -> str:
-    """Customize the upstream teleop script for the generated task.
-
-    Adds ``--dataset_dir`` / ``--dataset_file`` CLI args, wires those into the
-    recorder, removes the upstream ``terminations.time_out = None`` line so
-    episodes auto-reset at ``episode_length_s``, and (when cameras are
-    configured) re-attaches them after IsaacLab's XR pipeline strips them via
-    ``remove_camera_configs``.
-    """
-    content = _patch_script(content, package_name)
-
-    # CLI args after --task.
-    task_arg = 'parser.add_argument("--task", type=str, default=None, help="Name of the task.")'
-    dataset_args = (
-        f'{task_arg}\n'
-        f'parser.add_argument(\n'
-        f'    "--dataset_dir",\n'
-        f'    type=str,\n'
-        f'    default="./datasets/{task_name}",\n'
-        f'    help="Directory where the recorded HDF5 dataset will be written.",\n'
-        f')\n'
-        f'parser.add_argument(\n'
-        f'    "--dataset_file",\n'
-        f'    type=str,\n'
-        f'    default="dataset",\n'
-        f'    help="Filename (without extension) for the recorded dataset.",\n'
-        f')'
-    )
-    content = content.replace(task_arg, dataset_args, 1)
-
-    # Keep the time_out termination so the env auto-resets at episode_length_s.
-    content = content.replace(
-        "    # modify configuration\n    env_cfg.terminations.time_out = None\n",
-        "",
-        1,
-    )
-
-    # Camera re-attach after XR strip + recorder path plumbing.
-    xr_anchor = (
-        '    if args_cli.xr:\n'
-        '        env_cfg = remove_camera_configs(env_cfg)\n'
-        '        env_cfg.sim.render.antialiasing_mode = "DLSS"\n'
-    )
-    if xr_anchor in content:
-        replacement_lines = [xr_anchor.rstrip("\n")]
-        if has_cameras:
-            replacement_lines.append(
-                "        # Re-attach cameras after the XR strip — upstream removes\n"
-                "        # them because the XR compositor can fight with replicator\n"
-                "        # over the RTX render queue.\n"
-                "        attach_cameras(env_cfg.scene)"
-            )
-        replacement_lines.append(
-            "\n    # Override the recorder's per-run dataset target. The recorder\n"
-            "    # itself, entity_order, and eef_names are set by BaseILEnvCfg.\n"
-            "    env_cfg.recorders.dataset_export_dir_path = args_cli.dataset_dir\n"
-            "    env_cfg.recorders.dataset_filename = args_cli.dataset_file\n"
-        )
-        content = content.replace(xr_anchor, "\n".join(replacement_lines) + "\n", 1)
-
-    # attach_cameras import (after the package import that _patch_script just
-    # injected).
-    if has_cameras:
-        pkg_import = f"import {package_name}  # noqa: F401"
-        attach_import = (
-            f"from {package_name}.tasks.manager_based.{task_name}.{task_name}_cfg "
-            f"import attach_cameras"
-        )
-        if pkg_import in content and attach_import not in content:
-            content = content.replace(
-                pkg_import,
-                f"{pkg_import}\n{attach_import}",
-                1,
-            )
-
-    return content
-
-
-def _patch_record_annotated_demos(content: str, package_name: str) -> str:
-    """Patch the upstream annotated-demo recorder.
-
-    Publishes the per-EEF queue heads as ``env._debug_subtask_heads`` so
-    subtask predicates in ``mdp/observations.py`` can gate any debug printing
-    on the signal each EEF is currently dwelling on.
-    """
-    content = _patch_script(content, package_name)
-
-    anchor = "                _, _, terminated, truncated, _ = env.step(action)"
-    inject = (
-        "                # Publish the current queue heads so subtask\n"
-        "                # observation functions only print debug info for\n"
-        "                # the signal each EEF is actively waiting on.\n"
-        "                env._debug_subtask_heads = {\n"
-        "                    signal for signal in annotator.current_signal_heads().values()\n"
-        "                    if signal is not None\n"
-        "                }\n"
-    )
-    if anchor in content and "env._debug_subtask_heads" not in content:
-        content = content.replace(anchor, inject + anchor, 1)
-
-    return content
-
-
-def copy_isaaclab_scripts(
-    isaaclab_path: Path,
-    project_dir: Path,
-    package_name: str,
-    task_name: str,
-    has_cameras: bool,
-    dry_run: bool = False,
-) -> None:
-    """Copy and patch IsaacLab scripts into the generated project."""
-    for src_rel, dst_rel in SCRIPTS_TO_PATCH.items():
-        src = isaaclab_path / src_rel
-        dst = project_dir / dst_rel
-        if not src.is_file():
-            print(f"  WARNING: Script not found, skipping: {src}")
-            continue
-        raw = src.read_text()
-        if dst_rel == "scripts/teleop.py":
-            patched = _patch_teleop_script(raw, package_name, task_name, has_cameras)
-        elif dst_rel == "scripts/record_annotated_demos.py":
-            patched = _patch_record_annotated_demos(raw, package_name)
-        else:
-            patched = _patch_script(raw, package_name)
-        _write(dst, patched, dry_run, label=dst_rel)
-
-
-# ---------------------------------------------------------------------------
 # Extension project generation
 # ---------------------------------------------------------------------------
 def generate_extension_project(
     cfg: TaskDefinition,
     output_dir: Path,
-    isaaclab_path: Path | None = None,
     dry_run: bool = False,
     force: bool = False,
 ) -> None:
@@ -939,7 +774,7 @@ def generate_extension_project(
         print(f"=== Would generate extension project at: {project_dir}/ ===\n")
 
     # ----- 1) Root project files -----
-    print("  [1/7] Project scaffold...")
+    print("  [1/6] Project scaffold...")
     _write(
         project_dir / "pyproject.toml",
         jinja_env.get_template("extension/pyproject_toml.j2").render(context),
@@ -952,7 +787,7 @@ def generate_extension_project(
     )
 
     # ----- 2) Extension package files (source/<pkg>/) -----
-    print("  [2/7] Extension package files...")
+    print("  [2/6] Extension package files...")
     _write(
         ext_dir / "config" / "extension.toml",
         jinja_env.get_template("extension/extension_toml.j2").render(context),
@@ -975,7 +810,7 @@ def generate_extension_project(
     )
 
     # ----- 3) Python package root (source/<pkg>/<pkg>/) -----
-    print("  [3/7] Python package...")
+    print("  [3/6] Python package...")
     _write(
         pkg_dir / "__init__.py",
         jinja_env.get_template("extension/ext_init_py.j2").render(context),
@@ -988,7 +823,7 @@ def generate_extension_project(
     )
 
     # ----- 4) Assets module -----
-    print("  [4/7] Assets module...")
+    print("  [4/6] Assets module...")
     _write(
         assets_dir / "__init__.py",
         jinja_env.get_template("extension/assets_init_py.j2").render(context),
@@ -1002,7 +837,7 @@ def generate_extension_project(
         print(f"  Would create subdirs: scenes/, objects/, robots/ in {assets_dir}/")
 
     # ----- 5) Copy base_il_env -----
-    print("  [5/7] Base IL environment...")
+    print("  [5/6] Base IL environment...")
     if dry_run:
         print(f"  Would copy {BASE_IL_ENV_DIR}/ -> {base_env_dst}/")
     else:
@@ -1010,7 +845,7 @@ def generate_extension_project(
         print(f"  Copied:  {base_env_dst}/")
 
     # ----- 6) Task files -----
-    print("  [6/7] Task files...")
+    print("  [6/6] Task files...")
     _write(
         tasks_dir / "__init__.py",
         jinja_env.get_template("extension/tasks_init_py.j2").render(context),
@@ -1060,24 +895,7 @@ def generate_extension_project(
         dry_run,
     )
 
-    # ----- 7) Copy & patch IsaacLab scripts -----
-    if isaaclab_path is not None:
-        print("  [7/7] IsaacLab scripts (with extension import)...")
-        copy_isaaclab_scripts(
-            isaaclab_path,
-            project_dir,
-            package_name,
-            task_name,
-            has_cameras=bool(context["cameras"]),
-            dry_run=dry_run,
-        )
-    else:
-        print("  [7/7] Skipped IsaacLab scripts (--isaaclab-path not provided)")
-
     # ----- Summary -----
-    scripts_dir = project_dir / "scripts"
-    has_scripts = isaaclab_path is not None
-
     print(f"\n{'=' * 60}")
     print(f"Extension project '{task_id}' generated at:")
     print(f"  {project_dir}/")
@@ -1097,13 +915,11 @@ def generate_extension_project(
     print(f"  2. Review and customize: {task_dir / f'{task_name}_cfg.py'}")
     print(f"  3. Add task-specific MDP functions in: {mdp_dir}/")
     print(f"  4. Install: pip install -e {ext_dir}")
-    if has_scripts:
-        print(f"  5. Run: ./isaaclab.sh -p {scripts_dir / 'teleop.py'} --task {task_id}")
-    else:
-        print(f"  5. Run: ./isaaclab.sh -p {project_dir}/scripts/teleop.py --task {task_id}")
-        print(f"\n  NOTE: Scripts were not generated because --isaaclab-path was not provided.")
-        print(f"        Re-run with --isaaclab-path /path/to/IsaacLab to include launch scripts,"  )
-        print(f"        or copy IsaacLab scripts manually and add: import {package_name}  # noqa: F401")
+    print(f"     (the editable install writes a .pth that auto-imports {package_name},")
+    print(f"     so IsaacLab's stock scripts can find the registered gym envs.)")
+    print(f"  5. Run, e.g.:")
+    print(f"     ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py --task {task_id}")
+    print(f"     ./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {task_id}-Mimic")
 
 
 # ---------------------------------------------------------------------------
@@ -1118,15 +934,6 @@ def main():
         "--output-dir", "-o",
         default=".",
         help="Directory where the extension project will be created (default: current directory).",
-    )
-    parser.add_argument(
-        "--isaaclab-path",
-        default=None,
-        help=(
-            "Path to IsaacLab installation. When provided, launch scripts (teleop, "
-            "random_agent, zero_agent) are copied into the generated project with the "
-            "extension import pre-configured. Falls back to ISAACLAB_PATH env var."
-        ),
     )
     parser.add_argument("--dry-run", action="store_true", help="Print generated files instead of writing them.")
     parser.add_argument("--force", "-f", action="store_true", help="Overwrite existing project if it exists.")
@@ -1149,18 +956,9 @@ def main():
         print(f"ERROR: Invalid task definition:\n{e}")
         sys.exit(1)
 
-    # Resolve IsaacLab path
-    import os
-    isaaclab_path_str = args.isaaclab_path or os.environ.get("ISAACLAB_PATH")
-    isaaclab_path = Path(isaaclab_path_str).resolve() if isaaclab_path_str else None
-    if isaaclab_path and not (isaaclab_path / "isaaclab.sh").is_file():
-        print(f"WARNING: --isaaclab-path does not look like an IsaacLab installation: {isaaclab_path}")
-        print(f"         (isaaclab.sh not found). Scripts will not be copied.")
-        isaaclab_path = None
-
     output_dir = Path(args.output_dir).resolve()
     generate_extension_project(
-        cfg, output_dir, isaaclab_path=isaaclab_path, dry_run=args.dry_run, force=args.force,
+        cfg, output_dir, dry_run=args.dry_run, force=args.force,
     )
 
 

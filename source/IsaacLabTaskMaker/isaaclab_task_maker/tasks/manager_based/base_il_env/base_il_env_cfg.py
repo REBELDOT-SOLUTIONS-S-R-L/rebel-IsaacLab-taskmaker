@@ -192,6 +192,13 @@ class BaseILEnvCfg(ManagerBasedRLEnvCfg):
     # Temporary directory for URDF conversion (used by Pink IK)
     temp_urdf_dir: str = tempfile.gettempdir()
 
+    # Optional callable invoked by IsaacLab's teleop_se3_agent.py after the XR
+    # pipeline strips CameraCfg attributes via `remove_camera_configs`. Tasks
+    # with cameras set this to the module-level `attach_cameras(scene_cfg)`
+    # helper generated alongside the task cfg, so the cameras can be put back
+    # before `gym.make` runs.
+    xr_camera_reattach: object | None = None
+
     def __post_init__(self):
         """Post initialization — override in task configs, calling super().__post_init__()."""
         # Simulation defaults
