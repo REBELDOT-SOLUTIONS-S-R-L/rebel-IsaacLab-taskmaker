@@ -35,17 +35,15 @@
 **/*.log*
 *.tmp
 
-# Recordings / datasets
+# Recordings / datasets (any depth)
 **/recordings/*
-/datasets/
-examples/lego_g1/datasets/
-examples/lego_g1/scripts/datasets/
+**/datasets/
 
-# Example asset payloads kept outside git
-examples/lego_g1/source/lego_g1/lego_g1/assets/*
-!examples/lego_g1/source/lego_g1/lego_g1/assets/__init__.py
-source/IsaacLabTaskMaker/isaaclab_task_maker/assets/*
-!source/IsaacLabTaskMaker/isaaclab_task_maker/assets/__init__.py
+# Asset payloads kept outside git (any example, any source package)
+examples/**/assets/*
+!examples/**/assets/__init__.py
+source/*/*/assets/*
+!source/*/*/assets/__init__.py
 
 # Isaac Sim
 _isaac_sim*
