@@ -129,139 +129,233 @@ python scripts/create_task.py my_task.yaml --force     # overwrite existing
 
 ## 2. Section-by-section reference
 
-### `task_name` and `task_id` (required)
+### Task identity (required)
 
-| Field | Format | Example | Becomes |
-|---|---|---|---|
-| `task_name` | `snake_case` | `tm7_franka` | folder name, package name, class prefix `TM7Franka` |
-| `task_id` | Gymnasium ID | `IL-TM7-Franka-v0` | what you pass to `--task` |
+```yaml
+task_name: my_task                                # snake_case folder + Python class prefix
+task_id: IL-MyTask-v0                             # Gymnasium env ID (used by --task <id>)
+```
+
+- **`task_name`** — folder name under `tasks/manager_based/` and the prefix of
+  the generated cfg class (`my_task` → `MyTaskTaskCfg`).
+- **`task_id`** — gym registration ID; when `mimic:` is present, a sibling
+  `<task_id>-Mimic` env is registered too.
 
 ### `robot` (required)
 
 ```yaml
 robot:
-  name: franka                                   # scene attribute name (default: "robot")
-  import_path: isaaclab_assets.robots.franka     # Python import path
-  config_name: FRANKA_PANDA_HIGH_PD_CFG          # ArticulationCfg variable in that module
-  prim_path: "/World/envs/env_.*/Robot"          # default; rarely changed
-  init_pos: [0.0, 0.5, 0.4]                      # meters, [x, y, z]
-  init_rot: [0.7071, 0.0, 0.0, -0.7071]          # quaternion, [w, x, y, z]
-  scale:    [1.0, 1.0, 1.0]                      # optional
+  name: my_robot                                  # scene attribute name (default: "robot")
+  import_path: isaaclab_assets.robots.franka      # Python module with the ArticulationCfg
+  config_name: FRANKA_PANDA_HIGH_PD_CFG           # ArticulationCfg variable in that module
+  prim_path: "/World/envs/env_.*/Robot"           # USD path; rarely changed
+  init_pos: [0.0, 0.5, 0.4]                       # meters, [x, y, z]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]           # quaternion, [w, x, y, z]
+  scale: [1.0, 1.0, 1.0]                          # optional, default identity
 ```
 
-- `name` — scene attribute the robot is exposed under: `cfg.scene.<name>` and
-  the key for `env.scene["<name>"]` / `SceneEntityCfg("<name>")` throughout
-  the generated code. Defaults to `"robot"` for backward compat; set it to
-  something self-identifying (e.g. `unitree_g1`, `franka`, `so100`) when you
-  want the asset name to read well in observations and subtask configs.
+- **`name`** — becomes `cfg.scene.<name>` and the key for `env.scene["<name>"]`
+  / `SceneEntityCfg("<name>")` throughout the generated code. Defaults to
+  `"robot"` for backward compat; pick something self-identifying (e.g.
+  `unitree_g1`, `franka`, `so100`) so observations and subtask configs read
+  well.
+- **`import_path`** — module to `import` for the articulation config.
+- **`config_name`** — the `ArticulationCfg` variable inside that module.
+- **`prim_path`** — USD path pattern where the robot is spawned (`env_.*` is
+  replaced per parallel env). Default `/World/envs/env_.*/Robot`.
+- **`init_pos`** — initial world position in meters.
+- **`init_rot`** — initial world orientation as a `[w, x, y, z]` quaternion.
+- **`scale`** — uniform scale, default identity.
 
-Only `import_path` and `config_name` are mandatory; the rest fall back to defaults.
+Only `import_path` and `config_name` are mandatory; everything else has a default.
 
 ### `scene` (optional)
 
-The world USD that gets loaded once per environment.
+The world USD loaded once per environment.
 
 ```yaml
 scene:
-  usd_file: scene.usd            # placed at assets/scenes/<usd_file>
-  scale:    [1.0, 1.0, 1.0]
+  usd_file: scene.usd                             # filename in assets/scenes/
+  scale: [1.0, 1.0, 1.0]
   init_pos: [0.0, 0.0, 0.0]
   init_rot: [1.0, 0.0, 0.0, 0.0]
 ```
+
+- **`usd_file`** — scene USD filename; resolved against `assets/scenes/`.
+- **`scale`**, **`init_pos`**, **`init_rot`** — uniform scale and world-frame
+  transform applied to the scene root.
 
 If omitted, the generator assumes `scene.usd` at the origin.
 
 ### `scene_objects` (optional)
 
-Rigid bodies the robot interacts with. List as many as you need.
+Rigid bodies the robot interacts with. Each entry becomes a Python attribute
+on the generated `SceneCfg`.
 
 ```yaml
 scene_objects:
-  - name: tm7_bowl                                 # becomes a Python attribute
-    type: RigidObjectCfg                           # almost always this
-    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"     # {ENV_REGEX_NS} = per-env prefix
-    usd_file: tm7_bowl_collisions.usd              # placed at assets/objects/<usd_file>
-    scale:    [0.35, 0.35, 0.35]
-    init_pos: [0.0, 0.5, 0.185]
-    init_rot: [0.70711, 0.0, 0.0, 0.70711]
-    use_default_sdf_collision: true                # use SDF instead of baked collision
-    physics_material:                              # optional friction/restitution override
-      static_friction:  1.2
+  - name: object_1                                # Python attribute / scene key
+    type: RigidObjectCfg                          # or "AssetBaseCfg" for static deco
+    prim_path: "{ENV_REGEX_NS}/object_1"          # per-env USD path
+    usd_file: parts/object.usd                    # filename in assets/objects/
+    scale: [1.0, 1.0, 1.0]
+    init_pos: [0.0, -0.15, 0.85]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+    use_default_sdf_collision: true               # SDF-approximate the mesh
+    physics_material:                             # optional PhysX override
+      static_friction: 1.0
       dynamic_friction: 1.0
-      restitution:      0.0
+      restitution: 0.0
+  - name: object_2
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/object_2"
+    usd_file: parts/object.usd
+    scale: [1.0, 1.0, 1.0]
+    init_pos: [0.0, 0.15, 0.85]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
 ```
 
-- `usd_file` defaults to `<name>.usd` if omitted.
-- `use_default_sdf_collision: true` (default) overrides the mesh collision
-  approximation with SDF — good for arbitrary visual meshes used as dynamic
-  bodies. Set `false` to keep the collision approximation baked into the USD.
-- `physics_material` overrides PhysX friction/restitution for this object.
-  Omit to inherit the simulation's default material.
+- **`name`** — unique identifier; the generator emits `scene_cfg.<name>` and
+  this is what `env.scene["<name>"]` returns.
+- **`type`** — `RigidObjectCfg` for physics-tracked / resettable bodies,
+  `AssetBaseCfg` for static decoration.
+- **`prim_path`** — USD path for the spawned object. `{ENV_REGEX_NS}` is
+  substituted with the per-env prefix.
+- **`usd_file`** — file under `assets/objects/`; subdirectories are allowed.
+  Defaults to `<name>.usd` if omitted.
+- **`scale` / `init_pos` / `init_rot`** — per-object transform.
+- **`use_default_sdf_collision`** — when `true` (default), the spawner replaces
+  baked-in collision approximations with an SDF mesh. Set `false` to keep
+  whatever collision shape is in the USD.
+- **`physics_material`** — optional per-object friction / restitution override
+  (`static_friction`, `dynamic_friction`, `restitution`). Omit the block to
+  inherit the simulation defaults.
 
 ### `ik_controller` (required)
 
-Common fields for every controller:
+Common fields shared by every controller; per-controller extras are listed in §4.
 
 ```yaml
 ik_controller:
-  controller_type: <one of §4>
-  base_link_name: panda_link0                  # root of the kinematic chain
-  controlled_joint_names: [...]                # joints the controller drives
-  hand_joint_names: [...]                      # finger joints (optional)
-  num_hand_joints: 2                           # set to len(hand_joint_names)
+  controller_type: differential_ik                # see §4 for the full list
+  base_link_name: panda_link0                     # root of the kinematic chain
+  controlled_joint_names:                         # joints the controller drives
+    - "panda_joint.*"
+  hand_joint_names:                               # finger joints (optional)
+    - "panda_finger_joint.*"
+  num_hand_joints: 2                              # len(hand_joint_names)
 ```
 
-Per-controller extras: see §4.
+- **`controller_type`** — picks the action / controller layout (see §4 for
+  the full menu).
+- **`base_link_name`** — root link of the kinematic chain (required for
+  task-space controllers like Pink IK; ignored by joint-space controllers).
+- **`controlled_joint_names`** — joints the controller can move. Regexes are
+  allowed; `.*` matches all joints matching the pattern in one entry.
+- **`hand_joint_names`** *(optional)* — finger joints driven separately from
+  the arm. Order matters: it defines the column layout of the hand portion
+  of the action tensor.
+- **`num_hand_joints`** *(optional)* — total finger DOFs. Set to
+  `len(hand_joint_names)`.
 
 ### `eef` (required)
 
-End-effectors the task tracks. One entry per EEF.
+End-effectors the task tracks. Logical names appear in observations,
+subtask configs, and Mimic configs.
+
+Single-arm:
 
 ```yaml
 eef:
-  names: ["gripper"]                          # logical labels, free-form
+  names: ["gripper"]                              # logical EEF identifiers
   target_links:
-    gripper: panda_hand                       # robot link to track
-  frame_names:
-    gripper: panda_hand                       # for pink_ik, use URDF-prefixed name
+    gripper: panda_hand                           # robot link to track
+  frame_names:                                    # for pink_ik, URDF-prefixed name
+    gripper: panda_hand
 ```
 
-Bimanual humanoids:
+Bimanual:
 
 ```yaml
 eef:
   names: ["left", "right"]
   target_links:
-    left_wrist:  left_wrist_yaw_link
-    right_wrist: right_wrist_yaw_link
-  frame_names:                                # Pink IK requires URDF-prefixed names
-    left:  g1_29dof_rev_1_0_left_wrist_yaw_link
-    right: g1_29dof_rev_1_0_right_wrist_yaw_link
-  hand_joint_prefixes:                        # required for multi-EEF pink_ik
-    left:  "L_"                               # with interleaved hand joints
+    left:  left_wrist_yaw_link                    # USD body name
+    right: right_wrist_yaw_link
+  frame_names:                                    # URDF-prefixed names for Pink IK
+    left:  prefix_left_wrist_yaw_link
+    right: prefix_right_wrist_yaw_link
+  hand_joint_prefixes:                            # per-arm `hand_joint_names` prefix
+    left:  "L_"
     right: "R_"
 ```
 
-`hand_joint_prefixes` tells the generator which entries of
-`ik_controller.hand_joint_names` belong to each arm. Without it the generator
-falls back to an even split, which only works when joints are pre-grouped by
-arm in `hand_joint_names`.
+- **`names`** — logical EEF identifiers used by observations, subtasks, and
+  Mimic configs.
+- **`target_links`** — maps each EEF to the **USD body name** the controller
+  drives.
+- **`frame_names`** — maps each EEF to the **URDF link name** Pink IK uses
+  internally. URDF conversion often prefixes link names, so this is usually
+  different from `target_links`.
+- **`hand_joint_prefixes`** *(required for multi-EEF pink_ik with interleaved
+  hand joints)* — per-arm prefix of `hand_joint_names` entries that belong
+  to each EEF. Without it the generator falls back to an even split, which
+  only works when joints are pre-grouped by arm in `hand_joint_names`.
 
 ### `observations` (optional)
 
-Which links to expose in the observation dict. Usually mirrors `target_links`.
+Which robot links to expose in the observation dict. Usually mirrors
+`eef.target_links`.
 
 ```yaml
 observations:
   eef_link_names:
-    gripper: panda_hand
+    gripper: panda_hand                           # robot link whose pose is observed
 ```
+
+- **`eef_link_names`** — robot links whose pose is included in the
+  observation tensor (one ObsTerm per EEF, named `<eef>_eef_pos` /
+  `<eef>_eef_quat`). Must match the values in `eef.target_links`.
+
+### `cameras` (optional)
+
+Each entry becomes a `CameraCfg` on the scene cfg and is re-attached by
+`attach_cameras(scene_cfg)` after IsaacLab's XR pipeline strips cameras via
+`remove_camera_configs`. The `xr_camera_reattach` hook on `BaseILEnvCfg`
+calls that helper automatically.
+
+```yaml
+cameras:
+  - name: front_camera                            # scene_cfg.<name>
+    prim_path: "{ENV_REGEX_NS}/Robot/torso/front_camera"
+    height: 480
+    width: 640
+    data_types: ["rgb"]                           # add "distance_to_image_plane" for depth
+    focal_length: 12.0                            # mm
+    focus_distance: 400.0                         # cm
+    horizontal_aperture: 20.955                   # mm sensor width
+    clipping_range: [0.05, 10.0]                  # meters
+    offset_pos: [0.0, 0.0, 0.0]                   # parent-relative, meters
+    offset_rot: [0.5, 0.5, -0.5, -0.5]            # parent-relative quaternion
+    convention: opengl                            # "opengl" | "ros" | "world"
+```
+
+- **`name`** — scene attribute the camera is exposed under.
+- **`prim_path`** — USD prim the camera is mounted on (usually a robot link).
+- **`height` / `width`** — image resolution in pixels.
+- **`data_types`** — channels the camera renders; e.g. `["rgb"]`,
+  `["distance_to_image_plane"]`, or both.
+- **`focal_length` / `focus_distance` / `horizontal_aperture`** — pinhole
+  optics parameters (focal length and aperture in mm; focus distance in cm).
+- **`clipping_range`** — near / far clip planes in meters.
+- **`offset_pos` / `offset_rot`** — local-frame offset from the parent prim.
+- **`convention`** — axis convention for the camera frame.
 
 ### `teleop` (optional)
 
 ```yaml
 teleop:
-  device: keyboard          # keyboard | spacemouse | gamepad | handtracking | manusvive
+  device: keyboard                                # keyboard | spacemouse | gamepad | handtracking | manusvive
 ```
 
 Default: `handtracking` if `controller_type: pink_ik`, otherwise `keyboard`.
@@ -271,126 +365,128 @@ For `handtracking` with `pink_ik` you must also set the retargeter:
 ```yaml
 teleop:
   device: handtracking
-  retargeter_import: isaaclab.devices.openxr.retargeters.humanoid.unitree.inspire.g1_upper_body_retargeter
-  retargeter_class:  UnitreeG1RetargeterCfg
-  xr_anchor_pos: [-1.05, 0.0, -0.3]          # OpenXR tracking-space origin
+  retargeter_import: isaaclab.devices.openxr.retargeters.<your_retargeter_module>
+  retargeter_class: YourRetargeterCfg
+  xr_anchor_pos: [-1.0, 0.0, -0.3]                # XR tracking-space origin in world
   xr_anchor_rot: [1.0, 0.0, 0.0, 0.0]
 ```
 
-`xr_anchor_pos` / `xr_anchor_rot` position the operator's tracking-space
-origin in world coordinates so their hands land near the robot's wrists.
-Defaults are identity — required only for robots that aren't at `(0, 0, 0)`.
+- **`device`** — default teleop device. Can be overridden at the script CLI.
+- **`retargeter_import` / `retargeter_class`** *(required for hand tracking)* —
+  retargeter that maps XR hand poses onto the robot's joints / EEFs.
+- **`xr_anchor_pos` / `xr_anchor_rot`** *(handtracking only)* — anchor that
+  places the operator's tracking-space origin in world coordinates so their
+  hands land near the robot's wrists. Defaults are identity — required only
+  for robots that aren't at `(0, 0, 0)`.
 
-### `sim` (optional)
+### `sim` (optional, has defaults)
 
 ```yaml
 sim:
-  decimation: 6                # sim steps per policy step
-  episode_length_s: 20.0
-  dt: 0.008333                 # 1/120 — physics timestep
-  render_interval: 2
-  env_spacing: 2.5             # meters between parallel envs
+  decimation: 6                                   # sim steps per policy step
+  episode_length_s: 20.0                          # max episode duration, seconds
+  dt: 0.008333                                    # physics timestep (1/120)
+  render_interval: 2                              # render every N sim steps
+  env_spacing: 2.5                                # meters between parallel envs
 ```
 
-These propagate into the generated `__post_init__` and override the
-`BaseILEnvCfg` defaults.
+- **`decimation`** — number of physics steps per policy step. Higher values
+  smooth control at the cost of latency.
+- **`episode_length_s`** — maximum episode duration in seconds.
+- **`dt`** — physics timestep in seconds (`1/120 ≈ 0.008333`).
+- **`render_interval`** — render every N sim steps. `1` matches `dt`; larger
+  values speed up headless training.
+- **`env_spacing`** — distance between parallel envs in meters.
 
-### `cameras` (optional)
-
-Each entry becomes a `CameraCfg` attribute on the scene cfg, plus a call
-inside a module-level `attach_cameras(scene_cfg)` helper. IsaacLab's teleop
-script (via the `xr_camera_reattach` hook on `BaseILEnvCfg`) re-applies
-`attach_cameras` after the XR pipeline strips cameras via
-`remove_camera_configs`.
-
-```yaml
-cameras:
-  - name: head_camera
-    prim_path: "{ENV_REGEX_NS}/Robot/torso_link/d435_link/head_camera"
-    height: 480
-    width: 640
-    data_types: ["rgb"]                       # rgb / distance_to_image_plane / ...
-    focal_length: 12.0
-    focus_distance: 400.0
-    horizontal_aperture: 20.955
-    clipping_range: [0.05, 10.0]
-    offset_pos: [0.0, 0.0, 0.0]               # local-frame offset from parent prim
-    offset_rot: [0.5, 0.5, -0.5, -0.5]
-    convention: opengl                        # opengl / ros / world
-```
+All fields are optional. Defaults are sensible for IL workflows; tighten
+`dt` or lower `decimation` if the policy needs higher control bandwidth.
 
 ### `subtask_terms` (optional)
 
-Declarative binding from a `subtask_term_signal` name to the MDP function +
-params that compute it. Multiple signals can share one function (e.g. a
-single `grasp_brick_done` backs both `grasp_brick_left` and
-`grasp_brick_right`), so the generated `mdp/observations.py` collapses N
-near-duplicate stubs into one stub whose signature is the union of every
-param used.
+Declarative binding from a `subtask_term_signal` name to the MDP predicate
+function plus parameters that compute it. Multiple signals can share one
+function (DRY) — the generator collapses N near-duplicate stubs into one
+whose signature is the union of every param used.
 
 ```yaml
 subtask_terms:
-  grasp_brick_left:
-    func: grasp_brick_done                    # defaults to signal name if omitted
-    params:
+  pick_object_1_done:
+    func: pick_done                               # MDP function (defaults to signal name)
+    params:                                       # kwargs forwarded to the function
       eef_link: left_wrist_yaw_link
-      object_name: red_brick
-      dist_threshold: 0.25
+      object_name: object_1
+      dist_threshold: 0.05
       gripper_joint_pattern: "L_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
-  grasp_brick_right:
-    func: grasp_brick_done                    # ← same function, different params
+      gripper_closed_threshold: 1.0
+  pick_object_2_done:
+    func: pick_done                               # ← same function, different params
     params:
       eef_link: right_wrist_yaw_link
-      object_name: blue_brick
-      dist_threshold: 0.25
+      object_name: object_2
+      dist_threshold: 0.05
       gripper_joint_pattern: "R_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
+      gripper_closed_threshold: 1.0
 ```
 
-Param types are inferred from the YAML value (`str` / `int` / `float` /
-`tuple[float, ...]`) and used to type the generated stub's signature. The
-`signal_name` kwarg is added automatically.
+- **`func`** — name of the MDP function in the generated `mdp/observations.py`.
+  Multiple signals can share one function (DRY); the `signal_name` kwarg is
+  added automatically. Omit `func` to get one stub per signal.
+- **`params`** — kwargs passed to that function. Parameter types are inferred
+  from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`) and used
+  to type the generated stub's signature.
 
 If `subtask_terms` is omitted but `mimic.subtasks` declares signals, the
 generator falls back to one zero-returning stub per signal.
 
 ### `mimic` (optional)
 
-When present, an additional `<task_id>-Mimic` gym env is registered alongside
-the base task. Its cfg mixes the task cfg with
-`isaaclab.envs.mimic_env_cfg.MimicEnvCfg`, exposing `datagen_config` and
-`subtask_configs` for the IsaacLab Mimic pipeline.
+When present, a sibling `<task_id>-Mimic` env is registered with a cfg class
+that mixes `MimicEnvCfg` into the base task cfg.
 
 ```yaml
 mimic:
-  datagen:                                    # passed through to self.datagen_config.<k>
+  datagen:                                        # passthrough to DataGenConfig
     name: demo_src_my_task_D0
     generation_guarantee: true
     generation_num_trials: 1000
     seed: 1
-  subtasks:                                   # eef_name → ordered SubTaskConfig list
+    # ... any DataGenConfig field is accepted
+  subtasks:                                       # eef_name → ordered SubTaskConfig list
     left:
-      - object_ref: red_brick
-        subtask_term_signal: grasp_brick_left
+      - object_ref: object_1                      # scene object the subtask is "about"
+        subtask_term_signal: pick_object_1_done   # must match a key in subtask_terms
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs: { nn_k: 3 }
+        selection_strategy_kwargs:
+          nn_k: 3
         action_noise: 0.003
         num_interpolation_steps: 0
-      # ... more subtasks
-      - object_ref: red_brick
-        subtask_term_signal: null             # final subtask: run until end-of-demo
+      # ... more subtasks; the final entry uses subtask_term_signal: null
+      # to run "until end of demo".
+      - object_ref: object_1
+        subtask_term_signal: null
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs: { nn_k: 3 }
+        selection_strategy_kwargs:
+          nn_k: 3
         action_noise: 0.003
+    right:
+      # ...mirror structure for the right EEF, referencing object_2
 ```
+
+- **`datagen`** — free-form passthrough; every key is forwarded as
+  `self.datagen_config.<key> = <value>`. See `DataGenConfig` in
+  `isaaclab/envs/mimic_env_cfg.py` for the full schema.
+- **`subtasks`** — mapping of `eef_name` (must appear in `eef.names`) to an
+  ordered list of `SubTaskConfig` entries. Each entry's keys are forwarded
+  as kwargs to `SubTaskConfig(...)`; tuple-typed fields are written as YAML
+  lists and coerced to tuples by `create_task.py`. Set
+  `subtask_term_signal: null` on the final entry of each arm to denote "run
+  until end of demo" per IsaacLab convention.
 
 `mimic.subtasks[*].subtask_term_signal` names must match keys declared in
 `subtask_terms:` (or, in the fallback layout, are themselves used as the
-predicate function names). The final subtask of each arm uses
-`subtask_term_signal: null` per IsaacLab convention.
+predicate function names).
 
 ## 3. Picking a controller
 
