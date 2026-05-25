@@ -140,6 +140,7 @@ python scripts/create_task.py my_task.yaml --force     # overwrite existing
 
 ```yaml
 robot:
+  name: franka                                   # scene attribute name (default: "robot")
   import_path: isaaclab_assets.robots.franka     # Python import path
   config_name: FRANKA_PANDA_HIGH_PD_CFG          # ArticulationCfg variable in that module
   prim_path: "/World/envs/env_.*/Robot"          # default; rarely changed
@@ -147,6 +148,12 @@ robot:
   init_rot: [0.7071, 0.0, 0.0, -0.7071]          # quaternion, [w, x, y, z]
   scale:    [1.0, 1.0, 1.0]                      # optional
 ```
+
+- `name` — scene attribute the robot is exposed under: `cfg.scene.<name>` and
+  the key for `env.scene["<name>"]` / `SceneEntityCfg("<name>")` throughout
+  the generated code. Defaults to `"robot"` for backward compat; set it to
+  something self-identifying (e.g. `unitree_g1`, `franka`, `so100`) when you
+  want the asset name to read well in observations and subtask configs.
 
 Only `import_path` and `config_name` are mandatory; the rest fall back to defaults.
 
@@ -327,7 +334,7 @@ subtask_terms:
     func: grasp_brick_done                    # defaults to signal name if omitted
     params:
       eef_link: left_wrist_yaw_link
-      object_name: brick_2x2_1
+      object_name: red_brick
       dist_threshold: 0.25
       gripper_joint_pattern: "L_.*_proximal_joint"
       gripper_closed_threshold: 1.3
@@ -335,7 +342,7 @@ subtask_terms:
     func: grasp_brick_done                    # ← same function, different params
     params:
       eef_link: right_wrist_yaw_link
-      object_name: brick_2x2
+      object_name: blue_brick
       dist_threshold: 0.25
       gripper_joint_pattern: "R_.*_proximal_joint"
       gripper_closed_threshold: 1.3
@@ -364,7 +371,7 @@ mimic:
     seed: 1
   subtasks:                                   # eef_name → ordered SubTaskConfig list
     left:
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: grasp_brick_left
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -372,7 +379,7 @@ mimic:
         action_noise: 0.003
         num_interpolation_steps: 0
       # ... more subtasks
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: null             # final subtask: run until end-of-demo
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
