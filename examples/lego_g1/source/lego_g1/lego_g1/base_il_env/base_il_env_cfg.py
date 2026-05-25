@@ -58,7 +58,7 @@ class BaseILSceneCfg(InteractiveSceneCfg):
     )
 
     # Robot — override in your task config with .replace()
-    robot: ArticulationCfg = ArticulationCfg(
+    unitree_g1: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=sim_utils.UsdFileCfg(usd_path=""),  # set in task config
     )
@@ -96,15 +96,15 @@ class BaseObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         robot_joint_pos = ObsTerm(
             func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("unitree_g1")},
         )
         robot_root_pos = ObsTerm(
             func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("unitree_g1")},
         )
         robot_root_rot = ObsTerm(
             func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("unitree_g1")},
         )
 
         def __post_init__(self):

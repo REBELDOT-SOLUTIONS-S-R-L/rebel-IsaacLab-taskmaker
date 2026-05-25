@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 def _link_pos(env: "ManagerBasedRLEnv", link_name: str) -> torch.Tensor:
     """World-frame position of a named robot link, minus the env origin."""
-    robot = env.scene["robot"]
+    robot = env.scene["unitree_g1"]
     idx = robot.data.body_names.index(link_name)
     return robot.data.body_pos_w[:, idx] - env.scene.env_origins
 
@@ -51,7 +51,7 @@ def _proximal_joint_mean(env: "ManagerBasedRLEnv", joint_pattern: str) -> torch.
     Larger value ⇒ fingers curled inwards (closed). The pattern is a regex
     forwarded to ``ArticulationData.find_joints``, e.g. ``L_.*_proximal_joint``.
     """
-    robot = env.scene["robot"]
+    robot = env.scene["unitree_g1"]
     idxs, _ = robot.find_joints(joint_pattern)
     if not idxs:
         return torch.zeros(env.num_envs, device=env.device)

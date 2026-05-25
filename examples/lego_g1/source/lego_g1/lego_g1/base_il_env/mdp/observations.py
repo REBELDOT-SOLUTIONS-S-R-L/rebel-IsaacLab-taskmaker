@@ -25,8 +25,8 @@ def get_eef_pos(env: ManagerBasedRLEnv, link_name: str) -> torch.Tensor:
     Returns:
         EEF position tensor of shape (num_envs, 3).
     """
-    body_pos_w = env.scene["robot"].data.body_pos_w
-    eef_idx = env.scene["robot"].data.body_names.index(link_name)
+    body_pos_w = env.scene["unitree_g1"].data.body_pos_w
+    eef_idx = env.scene["unitree_g1"].data.body_names.index(link_name)
     eef_pos = body_pos_w[:, eef_idx] - env.scene.env_origins
     return eef_pos
 
@@ -41,8 +41,8 @@ def get_eef_quat(env: ManagerBasedRLEnv, link_name: str) -> torch.Tensor:
     Returns:
         EEF quaternion tensor of shape (num_envs, 4).
     """
-    body_quat_w = env.scene["robot"].data.body_quat_w
-    eef_idx = env.scene["robot"].data.body_names.index(link_name)
+    body_quat_w = env.scene["unitree_g1"].data.body_quat_w
+    eef_idx = env.scene["unitree_g1"].data.body_names.index(link_name)
     eef_quat = body_quat_w[:, eef_idx]
     return eef_quat
 
@@ -65,9 +65,9 @@ def object_obs(
     Returns:
         Observation tensor of shape (num_envs, 13).
     """
-    body_pos_w = env.scene["robot"].data.body_pos_w
-    left_eef_idx = env.scene["robot"].data.body_names.index(left_eef_link_name)
-    right_eef_idx = env.scene["robot"].data.body_names.index(right_eef_link_name)
+    body_pos_w = env.scene["unitree_g1"].data.body_pos_w
+    left_eef_idx = env.scene["unitree_g1"].data.body_names.index(left_eef_link_name)
+    right_eef_idx = env.scene["unitree_g1"].data.body_names.index(right_eef_link_name)
     left_eef_pos = body_pos_w[:, left_eef_idx] - env.scene.env_origins
     right_eef_pos = body_pos_w[:, right_eef_idx] - env.scene.env_origins
 
@@ -96,9 +96,9 @@ def get_robot_joint_state(
     Returns:
         Joint position tensor of shape (num_envs, num_matched_joints).
     """
-    indexes, _ = env.scene["robot"].find_joints(joint_names)
+    indexes, _ = env.scene["unitree_g1"].find_joints(joint_names)
     indexes = torch.tensor(indexes, dtype=torch.long)
-    return env.scene["robot"].data.joint_pos[:, indexes]
+    return env.scene["unitree_g1"].data.joint_pos[:, indexes]
 
 
 def get_all_robot_link_state(env: ManagerBasedRLEnv) -> torch.Tensor:
@@ -110,4 +110,4 @@ def get_all_robot_link_state(env: ManagerBasedRLEnv) -> torch.Tensor:
     Returns:
         All link state tensor of shape (num_envs, num_bodies, state_dim).
     """
-    return env.scene["robot"].data.body_link_state_w[:, :, :]
+    return env.scene["unitree_g1"].data.body_link_state_w[:, :, :]

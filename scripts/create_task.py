@@ -41,7 +41,7 @@ ROOT_DIR = SCRIPT_DIR.parent
 PACKAGE_DIR = ROOT_DIR / "source" / "IsaacLabTaskMaker" / "isaaclab_task_maker"
 TEMPLATES_DIR = PACKAGE_DIR / "templates"
 TASK_DEFS_DIR = TEMPLATES_DIR / "task_definitions"
-BASE_IL_ENV_DIR = PACKAGE_DIR / "tasks" / "manager_based" / "base_il_env"
+BASE_IL_ENV_DIR = TEMPLATES_DIR / "base_il_env"
 ASSETS_SRC_DIR = PACKAGE_DIR / "assets"
 
 SUPPORTED_CONTROLLERS = (
@@ -60,6 +60,7 @@ SUPPORTED_CONTROLLERS = (
 # Pydantic models for YAML validation
 # ---------------------------------------------------------------------------
 class RobotConfig(BaseModel):
+    name: str = "robot"
     import_path: str
     config_name: str
     prim_path: str = "/World/envs/env_.*/Robot"
@@ -383,6 +384,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
         "task_id": cfg.task_id,
         "controller_type": controller_type,
         "robot": {
+            "name": cfg.robot.name,
             "import_path": cfg.robot.import_path,
             "config_name": cfg.robot.config_name,
             "prim_path": cfg.robot.prim_path,
@@ -836,13 +838,25 @@ def generate_extension_project(
     else:
         print(f"  Would create subdirs: scenes/, objects/, robots/ in {assets_dir}/")
 
-    # ----- 5) Copy base_il_env -----
+    # ----- 5) Render / copy base_il_env -----
     print("  [5/6] Base IL environment...")
-    if dry_run:
-        print(f"  Would copy {BASE_IL_ENV_DIR}/ -> {base_env_dst}/")
-    else:
-        shutil.copytree(BASE_IL_ENV_DIR, base_env_dst)
-        print(f"  Copied:  {base_env_dst}/")
+    for src_file in sorted(BASE_IL_ENV_DIR.rglob("*")):
+        if not src_file.is_file():
+            continue
+        rel_path = src_file.relative_to(BASE_IL_ENV_DIR)
+        if src_file.suffix == ".j2":
+            template_name = (Path("base_il_env") / rel_path).as_posix()
+            rendered = jinja_env.get_template(template_name).render(context)
+            dst_file = base_env_dst / rel_path.with_suffix("")
+            _write(dst_file, rendered, dry_run)
+        else:
+            dst_file = base_env_dst / rel_path
+            if dry_run:
+                print(f"  Would copy {src_file} -> {dst_file}")
+            else:
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+                print(f"  Copied: {dst_file}")
 
     # ----- 6) Task files -----
     print("  [6/6] Task files...")

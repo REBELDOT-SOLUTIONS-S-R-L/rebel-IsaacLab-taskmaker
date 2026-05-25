@@ -61,12 +61,12 @@ _LEFT_HAND_CENTER_USD_PARENT = f"/Robot/left_wrist_yaw_link/{_LEFT_HAND_BASE_LIN
 _RIGHT_HAND_CENTER_USD_PARENT = f"/Robot/right_wrist_yaw_link/{_RIGHT_HAND_BASE_LINK}"
 
 _PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
-    "brick_2x2": sim_utils.RigidBodyMaterialCfg(
+    "blue_brick": sim_utils.RigidBodyMaterialCfg(
         static_friction=1.2,
         dynamic_friction=1.0,
         restitution=0.0,
     ),
-    "brick_2x2_1": sim_utils.RigidBodyMaterialCfg(
+    "red_brick": sim_utils.RigidBodyMaterialCfg(
         static_friction=1.2,
         dynamic_friction=1.0,
         restitution=0.0,
@@ -78,8 +78,8 @@ _PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
 # full per-env path at runtime (e.g. /World/envs/env_0/Scene/Looks/green).
 # stronger_than_descendants=True wins over any materials baked into the brick USD.
 _VISUAL_MATERIAL_COLORS: dict[str, str] = {
-    "brick_2x2": "blue",
-    "brick_2x2_1": "red",
+    "blue_brick": "blue",
+    "red_brick": "red",
 }
 
 
@@ -323,7 +323,7 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    robot: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
+    unitree_g1: ArticulationCfg = G1_INSPIRE_FTP_CFG.replace(
         prim_path="/World/envs/env_.*/Robot",
         init_state=ArticulationCfg.InitialStateCfg(
             pos=(-1.05, 0.0, 0.8),
@@ -333,8 +333,8 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    brick_2x2: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/brick_2x2",
+    blue_brick: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/blue_brick",
         spawn=UsdFileCfg(
             func=spawn_rigid_usd,
             usd_path=BRICK_2X2_USD_PATH,
@@ -346,8 +346,8 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, -0.2, 0.8), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
-    brick_2x2_1: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/brick_2x2_1",
+    red_brick: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/red_brick",
         spawn=UsdFileCfg(
             func=spawn_rigid_usd,
             usd_path=BRICK_2X2_USD_PATH,
@@ -370,9 +370,9 @@ class LegoG1ActionsCfg:
         pink_controlled_joint_names=[".*_shoulder_pitch_joint", ".*_shoulder_roll_joint", ".*_shoulder_yaw_joint", ".*_elbow_joint", ".*_wrist_yaw_joint", ".*_wrist_roll_joint", ".*_wrist_pitch_joint"],
         hand_joint_names=["L_index_proximal_joint", "L_middle_proximal_joint", "L_pinky_proximal_joint", "L_ring_proximal_joint", "L_thumb_proximal_yaw_joint", "R_index_proximal_joint", "R_middle_proximal_joint", "R_pinky_proximal_joint", "R_ring_proximal_joint", "R_thumb_proximal_yaw_joint", "L_index_intermediate_joint", "L_middle_intermediate_joint", "L_pinky_intermediate_joint", "L_ring_intermediate_joint", "L_thumb_proximal_pitch_joint", "R_index_intermediate_joint", "R_middle_intermediate_joint", "R_pinky_intermediate_joint", "R_ring_intermediate_joint", "R_thumb_proximal_pitch_joint", "L_thumb_intermediate_joint", "R_thumb_intermediate_joint", "L_thumb_distal_joint", "R_thumb_distal_joint"],
         target_eef_link_names={"left_wrist": _LEFT_EEF_LINK, "right_wrist": _RIGHT_EEF_LINK},
-        asset_name="robot",
+        asset_name="unitree_g1",
         controller=PinkIKControllerCfg(
-            articulation_name="robot",
+            articulation_name="unitree_g1",
             base_link_name="pelvis",
             num_hand_joints=24,
             show_ik_warnings=False,
@@ -422,10 +422,10 @@ class LegoG1ActionsCfg:
 # EEF / object trajectories.
 #
 # Object → arm assignment follows the initial scene layout:
-#   brick_2x2   is at y = -0.2  → assigned to the RIGHT arm
-#   brick_2x2_1 is at y = +0.2  → assigned to the LEFT  arm
-_LEFT_BRICK = "brick_2x2_1"
-_RIGHT_BRICK = "brick_2x2"
+#   blue_brick is at y = -0.2  → assigned to the RIGHT arm
+#   red_brick  is at y = +0.2  → assigned to the LEFT  arm
+_LEFT_BRICK = "red_brick"
+_RIGHT_BRICK = "blue_brick"
 # Inspire-hand proximal joints; mean joint angle is used as a coarse
 # "closed-ness" proxy. Only the thumb, index, and middle fingers are
 # included — the thumb uses its pitch (curl-down) joint as the closest
@@ -456,7 +456,7 @@ class LegoG1ObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         robot_joint_pos = ObsTerm(
             func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("unitree_g1")},
         )
         # End-effector pose observations.
         # Names MUST be `{eef_name}_eef_pos` / `{eef_name}_eef_quat` — `BaseILEnv.get_robot_eef_pose`
@@ -655,12 +655,12 @@ class LegoG1TaskCfg(BaseILEnvCfg):
 
         # Add hand-center EEF bodies in the spawned USD stage, then mirror them
         # into the generated URDF so observations and Pink IK use the same frames.
-        self.scene.robot.spawn.func = spawn_g1_with_hand_center_eefs
+        self.scene.unitree_g1.spawn.func = spawn_g1_with_hand_center_eefs
 
         # Convert the original Unitree USD to URDF for Pink IK. The task-local
         # EEF links are patched into the URDF after conversion.
         temp_urdf_output_path, temp_urdf_meshes_output_path = ControllerUtils.convert_usd_to_urdf(
-            self.scene.robot.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
+            self.scene.unitree_g1.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
         )
         _patch_g1_hand_center_eefs_into_urdf(temp_urdf_output_path)
         self.actions.pink_ik_cfg.controller.urdf_path = temp_urdf_output_path

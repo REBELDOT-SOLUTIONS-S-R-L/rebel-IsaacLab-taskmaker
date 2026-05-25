@@ -28,12 +28,15 @@ task_id: IL-LEGO-G1-v0
 
 
 # ─── ROBOT ───────────────────────────────────────────────────
+# name:         Scene attribute name (becomes `cfg.scene.<name>` and
+#               `env.scene["<name>"]`). Defaults to "robot" if omitted.
 # import_path:  Python module containing the ArticulationCfg.
 # config_name:  Name of the ArticulationCfg variable in that module.
 # prim_path:    USD scene path pattern (env_.* is replaced per environment).
 # init_pos:     Initial position [x, y, z] in meters.
 # init_rot:     Initial rotation [w, x, y, z] as a quaternion.
 robot:
+  name: unitree_g1
   import_path: isaaclab_assets.robots.unitree
   config_name: G1_INSPIRE_FTP_CFG
   prim_path: "/World/envs/env_.*/Robot"
@@ -73,9 +76,9 @@ scene:
 #                                   restitution       (default 0.0)
 #                               Omit to inherit the simulation's default material.
 scene_objects:
-  - name: brick_2x2
+  - name: blue_brick
     type: RigidObjectCfg
-    prim_path: "{ENV_REGEX_NS}/brick_2x2"
+    prim_path: "{ENV_REGEX_NS}/blue_brick"
     usd_file: lego/brick_2x2.usd
     scale: [0.0005, 0.0005, 0.0005]
     init_pos: [-0.5, 0.15, 0.83]
@@ -288,7 +291,7 @@ subtask_terms:
     func: grasp_brick_done
     params:
       eef_link: left_wrist_yaw_link
-      object_name: brick_2x2_1
+      object_name: red_brick
       dist_threshold: 0.25
       gripper_joint_pattern: "L_.*_proximal_joint"
       gripper_closed_threshold: 1.3
@@ -296,7 +299,7 @@ subtask_terms:
     func: move_brick_done
     params:
       eef_link: left_wrist_yaw_link
-      object_name: brick_2x2_1
+      object_name: red_brick
       target_pos: [-0.4, 0.05, 0.83]
       eef_dist_threshold: 0.25
       target_dist_threshold: 0.34
@@ -305,7 +308,7 @@ subtask_terms:
   release_brick_left:
     func: release_brick_done
     params:
-      object_name: brick_2x2_1
+      object_name: red_brick
       target_pos: [-0.4, 0.05, 0.83]
       target_dist_threshold: 0.34
       gripper_joint_pattern: "L_.*_proximal_joint"
@@ -314,7 +317,7 @@ subtask_terms:
     func: grasp_brick_done
     params:
       eef_link: right_wrist_yaw_link
-      object_name: brick_2x2
+      object_name: blue_brick
       dist_threshold: 0.25
       gripper_joint_pattern: "R_.*_proximal_joint"
       gripper_closed_threshold: 1.3
@@ -322,7 +325,7 @@ subtask_terms:
     func: move_brick_done
     params:
       eef_link: right_wrist_yaw_link
-      object_name: brick_2x2
+      object_name: blue_brick
       target_pos: [-0.4, -0.05, 0.83]
       eef_dist_threshold: 0.25
       target_dist_threshold: 0.34
@@ -331,7 +334,7 @@ subtask_terms:
   release_brick_right:
     func: release_brick_done
     params:
-      object_name: brick_2x2
+      object_name: blue_brick
       target_pos: [-0.4, -0.05, 0.83]
       target_dist_threshold: 0.34
       gripper_joint_pattern: "R_.*_proximal_joint"
@@ -371,7 +374,7 @@ mimic:
   # it represents "run until end of demo".
   subtasks:
     right:
-      - object_ref: brick_2x2
+      - object_ref: blue_brick
         subtask_term_signal: grasp_brick_right
         first_subtask_start_offset_range: [0, 0]
         subtask_term_offset_range: [0, 0]
@@ -382,7 +385,7 @@ mimic:
         num_interpolation_steps: 0
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2
+      - object_ref: blue_brick
         subtask_term_signal: move_brick_right
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -392,7 +395,7 @@ mimic:
         num_interpolation_steps: 3
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2
+      - object_ref: blue_brick
         subtask_term_signal: release_brick_right
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -402,7 +405,7 @@ mimic:
         num_interpolation_steps: 0
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2
+      - object_ref: blue_brick
         subtask_term_signal: null
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -413,7 +416,7 @@ mimic:
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
     left:
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: grasp_brick_left
         first_subtask_start_offset_range: [0, 0]
         subtask_term_offset_range: [0, 0]
@@ -424,7 +427,7 @@ mimic:
         num_interpolation_steps: 0
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: move_brick_left
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -434,7 +437,7 @@ mimic:
         num_interpolation_steps: 3
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: release_brick_left
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object
@@ -444,7 +447,7 @@ mimic:
         num_interpolation_steps: 0
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
-      - object_ref: brick_2x2_1
+      - object_ref: red_brick
         subtask_term_signal: null
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object

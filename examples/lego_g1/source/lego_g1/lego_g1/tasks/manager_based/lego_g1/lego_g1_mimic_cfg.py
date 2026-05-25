@@ -58,7 +58,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
 
         self.subtask_configs["left"] = [
             SubTaskConfig(
-                object_ref="brick_2x2_1",
+                object_ref="red_brick",
                 subtask_term_signal="grasp_brick_left",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -70,7 +70,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 first_subtask_start_offset_range=(0, 0),
             ),
             SubTaskConfig(
-                object_ref="brick_2x2_1",
+                object_ref="red_brick",
                 subtask_term_signal="move_brick_left",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -81,7 +81,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 apply_noise_during_interpolation=False,
             ),
             SubTaskConfig(
-                object_ref="brick_2x2_1",
+                object_ref="red_brick",
                 subtask_term_signal="release_brick_left",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -92,7 +92,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 apply_noise_during_interpolation=False,
             ),
             SubTaskConfig(
-                object_ref="brick_2x2_1",
+                object_ref="red_brick",
                 subtask_term_signal=None,
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -106,7 +106,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
 
         self.subtask_configs["right"] = [
             SubTaskConfig(
-                object_ref="brick_2x2",
+                object_ref="blue_brick",
                 subtask_term_signal="grasp_brick_right",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -118,7 +118,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 first_subtask_start_offset_range=(0, 0),
             ),
             SubTaskConfig(
-                object_ref="brick_2x2",
+                object_ref="blue_brick",
                 subtask_term_signal="move_brick_right",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -129,7 +129,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 apply_noise_during_interpolation=False,
             ),
             SubTaskConfig(
-                object_ref="brick_2x2",
+                object_ref="blue_brick",
                 subtask_term_signal="release_brick_right",
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",
@@ -140,7 +140,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
                 apply_noise_during_interpolation=False,
             ),
             SubTaskConfig(
-                object_ref="brick_2x2",
+                object_ref="blue_brick",
                 subtask_term_signal=None,
                 subtask_term_offset_range=(0, 0),
                 selection_strategy="nearest_neighbor_object",

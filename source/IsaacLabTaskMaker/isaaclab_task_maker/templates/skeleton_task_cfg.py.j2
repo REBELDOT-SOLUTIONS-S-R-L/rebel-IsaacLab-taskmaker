@@ -226,7 +226,7 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
         ),
     )
 
-    robot: ArticulationCfg = {{ robot.config_name }}.replace(
+    {{ robot.name }}: ArticulationCfg = {{ robot.config_name }}.replace(
         prim_path="{{ robot.prim_path }}",
         init_state=ArticulationCfg.InitialStateCfg(
             pos=({{ robot.init_pos }}),
@@ -271,9 +271,9 @@ class {{ class_prefix }}ActionsCfg:
         pink_controlled_joint_names={{ ik.controlled_joint_names | pylist }},
         hand_joint_names={{ ik.hand_joint_names | pylist }},
         target_eef_link_names={{ eef.target_links | pydict }},
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         controller=PinkIKControllerCfg(
-            articulation_name="robot",
+            articulation_name="{{ robot.name }}",
             base_link_name="{{ ik.base_link_name }}",
             num_hand_joints={{ ik.num_hand_joints }},
             show_ik_warnings=False,
@@ -317,7 +317,7 @@ class {{ class_prefix }}ActionsCfg:
     """Differential IK actions for {{ class_prefix }}."""
 
     arm_action = DifferentialInverseKinematicsActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         body_name="{{ eef.body_name }}",
         controller=DifferentialIKControllerCfg(
@@ -330,7 +330,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -342,7 +342,7 @@ class {{ class_prefix }}ActionsCfg:
     """Operational space controller actions for {{ class_prefix }}."""
 
     arm_action = OperationalSpaceControllerActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         body_name="{{ eef.body_name }}",
         body_offset=OperationalSpaceControllerActionCfg.OffsetCfg(pos=({{ ik.body_offset }})),
@@ -361,7 +361,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -373,7 +373,7 @@ class {{ class_prefix }}ActionsCfg:
     """RMPFlow actions for {{ class_prefix }}."""
 
     arm_action = RMPFlowActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         body_name="{{ eef.body_name }}",
         body_offset=RMPFlowActionCfg.OffsetCfg(pos=({{ ik.body_offset }})),
@@ -384,7 +384,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -396,7 +396,7 @@ class {{ class_prefix }}ActionsCfg:
     """Joint position actions for {{ class_prefix }}."""
 
     arm_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -404,7 +404,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -416,7 +416,7 @@ class {{ class_prefix }}ActionsCfg:
     """Relative joint position actions for {{ class_prefix }}."""
 
     arm_action = RelativeJointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         scale=1.0,
         use_zero_offset=True,
@@ -424,7 +424,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -436,7 +436,7 @@ class {{ class_prefix }}ActionsCfg:
     """Joint velocity actions for {{ class_prefix }}."""
 
     arm_action = JointVelocityActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -444,7 +444,7 @@ class {{ class_prefix }}ActionsCfg:
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -456,13 +456,13 @@ class {{ class_prefix }}ActionsCfg:
     """Joint effort actions for {{ class_prefix }}."""
 
     arm_action = JointEffortActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.controlled_joint_names | pylist }},
     )
 {% if ik.hand_joint_names %}
 
     gripper_action = JointPositionActionCfg(
-        asset_name="robot",
+        asset_name="{{ robot.name }}",
         joint_names={{ ik.hand_joint_names | pylist }},
         scale=1.0,
         use_default_offset=True,
@@ -484,7 +484,7 @@ class {{ class_prefix }}ObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         robot_joint_pos = ObsTerm(
             func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("{{ robot.name }}")},
         )
 {% if observations.eef_link_names %}
         # End-effector pose observations.
@@ -647,7 +647,7 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
 
         # Convert USD to URDF for Pink IK
         temp_urdf_output_path, temp_urdf_meshes_output_path = ControllerUtils.convert_usd_to_urdf(
-            self.scene.robot.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
+            self.scene.{{ robot.name }}.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
         )
         self.actions.pink_ik_cfg.controller.urdf_path = temp_urdf_output_path
         self.actions.pink_ik_cfg.controller.mesh_path = temp_urdf_meshes_output_path

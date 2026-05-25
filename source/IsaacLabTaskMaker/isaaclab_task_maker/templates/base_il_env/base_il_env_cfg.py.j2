@@ -41,7 +41,7 @@ from . import mdp
 class BaseILSceneCfg(InteractiveSceneCfg):
     """Minimal scene with ground, lights, and a robot placeholder.
 
-    Override ``robot`` in your task config to swap the robot articulation.
+    Override ``{{ robot.name }}`` in your task config to swap the robot articulation.
     Add objects (e.g. ``RigidObjectCfg``) as needed.
     """
 
@@ -58,7 +58,7 @@ class BaseILSceneCfg(InteractiveSceneCfg):
     )
 
     # Robot — override in your task config with .replace()
-    robot: ArticulationCfg = ArticulationCfg(
+    {{ robot.name }}: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/Robot",
         spawn=sim_utils.UsdFileCfg(usd_path=""),  # set in task config
     )
@@ -96,15 +96,15 @@ class BaseObservationsCfg:
         actions = ObsTerm(func=mdp.last_action)
         robot_joint_pos = ObsTerm(
             func=base_mdp.joint_pos,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("{{ robot.name }}")},
         )
         robot_root_pos = ObsTerm(
             func=base_mdp.root_pos_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("{{ robot.name }}")},
         )
         robot_root_rot = ObsTerm(
             func=base_mdp.root_quat_w,
-            params={"asset_cfg": SceneEntityCfg("robot")},
+            params={"asset_cfg": SceneEntityCfg("{{ robot.name }}")},
         )
 
         def __post_init__(self):
