@@ -43,7 +43,12 @@ parser.add_argument(
     default="./datasets/annotated_dataset.hdf5",
     help="File path to export recorded annotated demos.",
 )
-parser.add_argument("--step_hz", type=int, default=30, help="Environment stepping rate in Hz.")
+parser.add_argument(
+    "--step_hz",
+    type=int,
+    default=0,
+    help="Optional wall-clock pacing rate in Hz. Set to 0 to run as fast as possible.",
+)
 parser.add_argument(
     "--num_demos",
     type=int,
@@ -70,9 +75,17 @@ parser.add_argument(
     default=False,
     help="Enable Pinocchio.",
 )
+parser.add_argument(
+    "--debugging_logs",
+    action="store_true",
+    default=False,
+    help="Print detailed subtask predicate diagnostics such as distances, thresholds, and pass/fail rows.",
+)
 
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
+
+os.environ["LEGO_G1_DEBUG_SUBTASKS"] = "10" if args_cli.debugging_logs else "0"
 
 app_launcher_args = vars(args_cli)
 
@@ -129,13 +142,12 @@ class RateLimiter:
         self.hz = hz
         self.last_time = time.time()
         self.sleep_duration = 1.0 / hz
-        self.render_period = min(0.033, self.sleep_duration)
 
-    def sleep(self, env: gym.Env):
+    def sleep(self):
         next_wakeup_time = self.last_time + self.sleep_duration
-        while time.time() < next_wakeup_time:
-            time.sleep(self.render_period)
-            env.sim.render()
+        remaining = next_wakeup_time - time.time()
+        if remaining > 0:
+            time.sleep(remaining)
 
         self.last_time = self.last_time + self.sleep_duration
         if self.last_time < time.time():
@@ -309,6 +321,9 @@ def create_environment_config(output_dir: str, output_file_name: str) -> Manager
         env_cfg.terminations.success = None
     if hasattr(env_cfg.observations, "policy"):
         env_cfg.observations.policy.concatenate_terms = False
+    env_cfg.sim.dt = 1 / 120
+    env_cfg.decimation = 4
+    env_cfg.sim.render_interval = 4
 
     if args_cli.xr:
         if not args_cli.enable_cameras:
@@ -595,7 +610,7 @@ def main() -> int:
                 if not recording_active:
                     env.sim.render()
                     if rate_limiter is not None:
-                        rate_limiter.sleep(env)
+                        rate_limiter.sleep()
                     continue
 
                 try:
@@ -607,7 +622,7 @@ def main() -> int:
                 if action is None:
                     env.sim.render()
                     if rate_limiter is not None:
-                        rate_limiter.sleep(env)
+                        rate_limiter.sleep()
                     continue
 
                 newly_latched = annotator.advance(raw_signal_reader)
@@ -642,7 +657,7 @@ def main() -> int:
                     completion_announced = False
 
                 if rate_limiter is not None:
-                    rate_limiter.sleep(env)
+                    rate_limiter.sleep()
 
         if recording_active and annotator.is_complete():
             log_status(logging.INFO, "Saving completed episode before exit.")

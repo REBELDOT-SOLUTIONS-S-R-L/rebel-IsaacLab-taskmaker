@@ -427,14 +427,16 @@ class LegoG1ActionsCfg:
 _LEFT_BRICK = "brick_2x2_1"
 _RIGHT_BRICK = "brick_2x2"
 # Inspire-hand proximal joints; mean joint angle is used as a coarse
-# "closed-ness" proxy.
-_LEFT_GRIPPER_JOINTS = "L_.*_proximal_joint"
-_RIGHT_GRIPPER_JOINTS = "R_.*_proximal_joint"
+# "closed-ness" proxy. Only the thumb, index, and middle fingers are
+# included — the thumb uses its pitch (curl-down) joint as the closest
+# analog to the other fingers' proximal flexion.
+_LEFT_GRIPPER_JOINTS = r"L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+_RIGHT_GRIPPER_JOINTS = r"R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
 
 # Dummy thresholds — replace with values derived from real demos.
-_DIST_TO_BRICK_THRESHOLD = 0.25            # m  (eef ↔ brick)
-_BRICK_TO_TARGET_THRESHOLD = 0.34          # m  (brick ↔ placement target)
-_GRIPPER_CLOSED_THRESHOLD = 1.3            # rad  (proximal joint mean)
+_DIST_TO_BRICK_THRESHOLD = 0.2            # m  (eef ↔ brick)
+_BRICK_TO_TARGET_THRESHOLD = 0.29          # m  (brick ↔ placement target)
+_GRIPPER_CLOSED_THRESHOLD = 0.5            # rad  (proximal joint mean)
 _GRIPPER_OPEN_THRESHOLD = 0.15              # rad  (proximal joint mean)
 
 # Per-arm placement targets and idle poses, in env-local frame.

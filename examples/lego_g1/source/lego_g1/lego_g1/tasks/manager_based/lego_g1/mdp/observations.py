@@ -66,7 +66,7 @@ def _tensor(values, device) -> torch.Tensor:
 # Throttle subtask predicate prints so they don't flood stdout at sim rate.
 # Set LEGO_G1_DEBUG_SUBTASKS=0 to silence, or to an integer N to print every Nth call.
 _DEBUG_SUBTASKS_ENV = "LEGO_G1_DEBUG_SUBTASKS"
-_DEBUG_DEFAULT_EVERY = 10
+_DEBUG_DEFAULT_EVERY = 0
 _print_counters: dict[str, int] = {}
 
 
