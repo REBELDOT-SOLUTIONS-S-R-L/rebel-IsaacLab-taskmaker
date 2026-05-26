@@ -39,6 +39,10 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
   `DoneTerm` entries (e.g. a Mimic-style `success` criterion) onto
   `TerminationsCfg` and stubs the matching predicates in `mdp/terminations.py`
   with inferred type signatures — same DRY collapsing as `subtask_terms`.
+- **Per-object reset samplers.** `scene_objects[*].reset` can opt objects
+  into vanilla uniform resets or seeded, scrambled Sobol resets. Sobol objects
+  are grouped into one joint reset event so multi-object initial states get
+  joint coverage, while the robot resets through its own generated event.
 - **No script forking.** Generated extensions install a `.pth` file that
   auto-registers gym envs on Python startup, so IsaacLab's stock scripts
   (`teleop_se3_agent.py`, `record_annotated_demos.py`, `random_agent.py`,
@@ -234,6 +238,55 @@ scene_objects:
 - **`physics_material`** — optional per-object friction / restitution override
   (`static_friction`, `dynamic_friction`, `restitution`). Omit the block to
   inherit the simulation defaults.
+
+#### Per-object reset randomization
+
+Rigid objects can opt into reset randomization with a nested `reset:` block.
+If `reset` is omitted, the object resets to its configured `init_pos` /
+`init_rot`; Sobol is never applied implicitly.
+
+```yaml
+resets:
+  seed: 0                                        # global default for Sobol objects
+
+scene_objects:
+  - name: blue_brick
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/blue_brick"
+    usd_file: lego/brick_2x2.usd
+    init_pos: [-0.5, -0.15, 0.82]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+    reset:
+      sampler: sobol                            # uniform | sobol; default uniform
+      seed: 0                                   # optional; defaults to resets.seed
+      pos_range:
+        x: [-0.03, 0.03]
+        y: [-0.03, 0.03]
+      rot_range:
+        rz: [-0.2, 0.2]                         # aliases: rx/ry/rz or roll/pitch/yaw
+```
+
+- **`sampler`** — `uniform` emits a per-object
+  `mdp.reset_root_state_uniform` term. `sobol` emits one joint
+  `mdp.reset_root_state_sobol` term shared by all Sobol objects in the task.
+- **`seed`** — deterministic Sobol scramble seed for this object. All Sobol
+  objects in one task must share the same seed because they share one joint
+  Sobol engine. If omitted, `resets.seed` is used.
+- **`pos_range`** — optional offsets for `x`, `y`, `z`.
+- **`rot_range`** — optional offsets for `rx`, `ry`, `rz` or
+  `roll`, `pitch`, `yaw`.
+- **`pose_range`** — optional direct pose range using canonical keys
+  (`x`, `y`, `z`, `roll`, `pitch`, `yaw`). It can be combined with
+  `pos_range` / `rot_range`; later declarations for the same key win.
+- **`velocity_range`** — optional root velocity offsets with the same six
+  keys (`x`, `y`, `z`, `roll`, `pitch`, `yaw`).
+
+When any object reset is configured, the generated `EventCfg` disables the
+blanket `reset_scene_to_default` term and emits separate reset terms instead:
+`reset_robot` for the configured robot, default reset terms for non-randomized
+objects, uniform terms for `sampler: uniform`, and a grouped
+`reset_sobol_objects` term for `sampler: sobol`. This avoids writing the same
+object root state twice in one reset pass.
 
 ### `ik_controller` (required)
 
@@ -675,6 +728,9 @@ files are written, so a bad YAML fails fast with a readable error.
         │   ├── base_il_env.py
         │   ├── base_il_env_cfg.py
         │   └── mdp/
+        │       ├── __init__.py
+        │       ├── events.py                 ← reset_robot_to_default + Sobol reset
+        │       └── observations.py
         └── tasks/
             └── manager_based/
                 └── <task_name>/
