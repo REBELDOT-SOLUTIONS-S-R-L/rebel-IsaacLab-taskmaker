@@ -446,7 +446,6 @@ def format_progress(annotator: OnlineSubtaskAnnotationState) -> str:
 
 
 def reset_episode(env: ManagerBasedRLEnv, teleop_interface: object, annotator: OnlineSubtaskAnnotationState) -> None:
-    env.sim.reset()
     env.recorder_manager.reset()
     annotator.reset()
     env.reset()

@@ -26,7 +26,7 @@ import subprocess
 import sys
 import sysconfig
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
@@ -82,6 +82,17 @@ class PhysicsMaterialConfig(BaseModel):
     restitution: float = 0.0
 
 
+class ObjectResetConfig(BaseModel):
+    """Optional per-object reset randomization emitted as EventTerm entries."""
+
+    sampler: Literal["uniform", "sobol"] = "uniform"
+    seed: Optional[int] = None
+    pose_range: dict[str, tuple[float, float]] = {}
+    pos_range: dict[str, tuple[float, float]] = {}
+    rot_range: dict[str, tuple[float, float]] = {}
+    velocity_range: dict[str, tuple[float, float]] = {}
+
+
 class SceneObject(BaseModel):
     name: str
     type: str = "RigidObjectCfg"
@@ -96,6 +107,9 @@ class SceneObject(BaseModel):
     # Optional per-object physics material. If None, no material override is applied
     # and the object inherits the simulation's default friction/restitution.
     physics_material: Optional[PhysicsMaterialConfig] = None
+    # Optional reset randomization. When omitted, the object resets to init_state
+    # through reset_scene_to_default only.
+    reset: Optional[ObjectResetConfig] = None
 
 
 class IKControllerConfig(BaseModel):
@@ -177,6 +191,12 @@ class SimConfig(BaseModel):
     env_spacing: float = 2.5
 
 
+class ResetDefaultsConfig(BaseModel):
+    """Global defaults for generated reset EventTerms."""
+
+    seed: int = 0
+
+
 class SubTaskSpec(BaseModel):
     """A single SubTaskConfig entry. Extra keys are forwarded to SubTaskConfig as-is."""
 
@@ -247,6 +267,7 @@ class TaskDefinition(BaseModel):
     teleop: TeleopConfig = TeleopConfig()
     sim: SimConfig = SimConfig()
     observations: dict = {}
+    resets: ResetDefaultsConfig = ResetDefaultsConfig()
     mimic: Optional[MimicConfig] = None
     # Optional binding from subtask_term_signal name to a (function, params)
     # pair. Used to flesh out the SubtaskTermsCfg ObsTerms and the MDP stub
@@ -384,11 +405,13 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "init_rot": _join_floats(obj.init_rot),
             "use_default_sdf_collision": obj.use_default_sdf_collision,
             "physics_material": physics_material,
+            "reset": _build_object_reset_context(obj, cfg.resets.seed),
         })
 
     has_sdf_objects = any(o.use_default_sdf_collision for o in cfg.scene_objects)
     has_baked_collision_objects = any(not o.use_default_sdf_collision for o in cfg.scene_objects)
     has_physics_materials = any(o.physics_material is not None for o in cfg.scene_objects)
+    reset_events = _build_reset_events_context(scene_objects)
 
     eef_slices = _build_eef_slices(cfg)
     cameras = _build_cameras_context(cfg)
@@ -430,6 +453,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
         },
         "env_spacing": cfg.sim.env_spacing,
         "scene_objects": scene_objects,
+        "reset_events": reset_events,
         "cameras": cameras,
         "has_sdf_objects": has_sdf_objects,
         "has_baked_collision_objects": has_baked_collision_objects,
@@ -619,6 +643,138 @@ def _py_value(value: Any) -> str:
         if inner_types <= {int, float} and inner_types != {bool}:
             return repr(tuple(value))
     return repr(value)
+
+
+_POSE_KEY_ORDER = ("x", "y", "z", "roll", "pitch", "yaw")
+_POSITION_KEYS = {"x", "y", "z"}
+_ROTATION_KEY_ALIASES = {
+    "rx": "roll",
+    "ry": "pitch",
+    "rz": "yaw",
+    "roll": "roll",
+    "pitch": "pitch",
+    "yaw": "yaw",
+}
+
+
+def _normalize_reset_range_value(value: tuple[float, float], path: str) -> tuple[float, float]:
+    """Validate and normalize a two-element reset range."""
+    if len(value) != 2:
+        raise ValueError(f"{path} must contain exactly two values: [min, max].")
+    lo, hi = float(value[0]), float(value[1])
+    if hi < lo:
+        raise ValueError(f"{path} has max < min: {value}.")
+    return (lo, hi)
+
+
+def _add_pose_range_key(
+    out: dict[str, tuple[float, float]],
+    key: str,
+    value: tuple[float, float],
+    path: str,
+) -> None:
+    """Add a canonical pose randomization range, rejecting typos and duplicates."""
+    if key not in _POSE_KEY_ORDER:
+        raise ValueError(
+            f"{path} uses unsupported pose key '{key}'. "
+            "Expected one of: x, y, z, roll, pitch, yaw."
+        )
+    if key in out:
+        raise ValueError(f"{path} duplicates pose key '{key}'.")
+    out[key] = _normalize_reset_range_value(value, path)
+
+
+def _build_object_reset_context(
+    obj: SceneObject,
+    global_seed: int,
+) -> Optional[dict[str, Any]]:
+    """Convert an optional object reset block into template-friendly values."""
+    if obj.reset is None:
+        return None
+    if obj.type != "RigidObjectCfg":
+        raise ValueError(
+            f"scene_objects.{obj.name}.reset requires type: RigidObjectCfg; "
+            f"got {obj.type!r}."
+        )
+
+    pose_range: dict[str, tuple[float, float]] = {}
+
+    for key, value in obj.reset.pose_range.items():
+        canonical = _ROTATION_KEY_ALIASES.get(key, key)
+        _add_pose_range_key(pose_range, canonical, value, f"scene_objects.{obj.name}.reset.pose_range.{key}")
+
+    for key, value in obj.reset.pos_range.items():
+        if key not in _POSITION_KEYS:
+            raise ValueError(
+                f"scene_objects.{obj.name}.reset.pos_range.{key} is invalid; "
+                "expected one of: x, y, z."
+            )
+        _add_pose_range_key(pose_range, key, value, f"scene_objects.{obj.name}.reset.pos_range.{key}")
+
+    for key, value in obj.reset.rot_range.items():
+        canonical = _ROTATION_KEY_ALIASES.get(key)
+        if canonical is None:
+            raise ValueError(
+                f"scene_objects.{obj.name}.reset.rot_range.{key} is invalid; "
+                "expected one of: rx, ry, rz, roll, pitch, yaw."
+            )
+        _add_pose_range_key(pose_range, canonical, value, f"scene_objects.{obj.name}.reset.rot_range.{key}")
+
+    velocity_range = {
+        key: _normalize_reset_range_value(value, f"scene_objects.{obj.name}.reset.velocity_range.{key}")
+        for key, value in obj.reset.velocity_range.items()
+    }
+
+    ordered_pose_range = {key: pose_range[key] for key in _POSE_KEY_ORDER if key in pose_range}
+    seed = global_seed if obj.reset.seed is None else obj.reset.seed
+
+    return {
+        "sampler": obj.reset.sampler,
+        "seed": seed,
+        "pose_range": ordered_pose_range,
+        "pose_range_literal": _py_value(ordered_pose_range),
+        "velocity_range": velocity_range,
+        "velocity_range_literal": _py_value(velocity_range),
+    }
+
+
+def _build_reset_events_context(scene_objects: list[dict[str, Any]]) -> dict[str, Any]:
+    """Group object reset EventTerms by sampler.
+
+    Sobol resets are emitted as one joint EventTerm so the Sobol engine covers
+    the concatenated pose dimensions for all participating assets.
+    """
+    uniform_objects = [
+        obj for obj in scene_objects
+        if obj.get("reset") is not None and obj["reset"]["sampler"] == "uniform"
+    ]
+    sobol_objects = [
+        obj for obj in scene_objects
+        if obj.get("reset") is not None and obj["reset"]["sampler"] == "sobol"
+    ]
+    default_objects = [
+        obj for obj in scene_objects
+        if obj.get("reset") is None and obj["type"] == "RigidObjectCfg"
+    ]
+    has_object_resets = bool(uniform_objects or sobol_objects)
+
+    sobol_seed = 0
+    if sobol_objects:
+        seeds = {obj["reset"]["seed"] for obj in sobol_objects}
+        if len(seeds) != 1:
+            raise ValueError(
+                "Sobol object resets use one joint Sobol engine, so all "
+                "scene_objects.*.reset.seed values must match."
+            )
+        sobol_seed = next(iter(seeds))
+
+    return {
+        "has_object_resets": has_object_resets,
+        "default": default_objects if has_object_resets else [],
+        "uniform": uniform_objects,
+        "sobol": sobol_objects,
+        "sobol_seed": sobol_seed,
+    }
 
 
 def _build_subtask_signal_context(cfg: TaskDefinition) -> dict[str, Any]:

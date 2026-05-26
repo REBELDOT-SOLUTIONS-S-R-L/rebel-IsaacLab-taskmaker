@@ -544,7 +544,66 @@ class {{ class_prefix }}ObservationsCfg:
 # =====================================================================
 @configclass
 class {{ class_prefix }}EventCfg:
+{% if reset_events.has_object_resets %}
+    reset_all = None
+
+    reset_robot = EventTerm(
+        func=mdp.reset_robot_to_default,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("{{ robot.name }}")},
+    )
+{% for obj in reset_events.default %}
+
+    reset_{{ obj.name }}_default = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {},
+            "velocity_range": {},
+            "asset_cfg": SceneEntityCfg("{{ obj.name }}"),
+        },
+    )
+{% endfor %}
+{% else %}
     reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+{% endif %}
+{% for obj in reset_events.uniform %}
+
+    reset_{{ obj.name }} = EventTerm(
+        func=mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "pose_range": {{ obj.reset.pose_range_literal }},
+            "velocity_range": {{ obj.reset.velocity_range_literal }},
+            "asset_cfg": SceneEntityCfg("{{ obj.name }}"),
+        },
+    )
+{% endfor %}
+{% if reset_events.sobol %}
+
+    reset_sobol_objects = EventTerm(
+        func=mdp.reset_root_state_sobol,
+        mode="reset",
+        params={
+            "asset_cfgs": {
+{% for obj in reset_events.sobol %}
+                "{{ obj.name }}": SceneEntityCfg("{{ obj.name }}"),
+{% endfor %}
+            },
+            "pose_ranges": {
+{% for obj in reset_events.sobol %}
+                "{{ obj.name }}": {{ obj.reset.pose_range_literal }},
+{% endfor %}
+            },
+            "velocity_ranges": {
+{% for obj in reset_events.sobol %}
+                "{{ obj.name }}": {{ obj.reset.velocity_range_literal }},
+{% endfor %}
+            },
+            "seed": {{ reset_events.sobol_seed }},
+        },
+    )
+{% endif %}
 
 
 @configclass

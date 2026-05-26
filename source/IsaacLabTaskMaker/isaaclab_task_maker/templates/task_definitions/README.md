@@ -127,6 +127,15 @@ scene:                          # defaults to scene.usd at identity transform
   init_rot: [1.0, 0.0, 0.0, 0.0]
 
 scene_objects: []               # list of RigidObjectCfg entries
+                                # optional per-object reset:
+                                #   reset:
+                                #     sampler: uniform | sobol  # default uniform
+                                #     seed: 0                   # Sobol seed
+                                #     pos_range: {x: [-0.03, 0.03], y: [-0.03, 0.03]}
+                                #     rot_range: {rz: [-0.2, 0.2]}
+
+resets:
+  seed: 0                       # global default for reset.seed
 
 observations:
   eef_link_names:               # links to observe (usually same as target_links)

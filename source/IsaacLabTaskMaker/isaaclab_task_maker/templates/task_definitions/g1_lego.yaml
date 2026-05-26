@@ -75,14 +75,49 @@ scene:
 #                                   dynamic_friction  (default 0.5)
 #                                   restitution       (default 0.0)
 #                               Omit to inherit the simulation's default material.
+#   reset:                      Optional. When omitted, reset_scene_to_default uses
+#                               init_pos/init_rot only. sampler defaults to uniform.
+#                               sampler: uniform | sobol
+#                               seed:    Scrambled Sobol seed. All Sobol objects in
+#                                        this task share one joint engine and seed.
+#                               pos_range keys: x, y, z
+#                               rot_range keys: rx/ry/rz or roll/pitch/yaw
 scene_objects:
   - name: blue_brick
     type: RigidObjectCfg
     prim_path: "{ENV_REGEX_NS}/blue_brick"
     usd_file: lego/brick_2x2.usd
     scale: [0.0005, 0.0005, 0.0005]
+    init_pos: [-0.5, -0.15, 0.82]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+    reset:
+      sampler: sobol
+      seed: 0
+      pos_range:
+        x: [-0.03, 0.03]
+        y: [-0.03, 0.03]
+      rot_range:
+        rz: [-0.2, 0.2]
+    use_default_sdf_collision: true
+    physics_material:
+      static_friction: 1.2
+      dynamic_friction: 1.0
+      restitution: 0.0
+  - name: red_brick
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/red_brick"
+    usd_file: lego/brick_2x2.usd
+    scale: [0.0005, 0.0005, 0.0005]
     init_pos: [-0.5, 0.15, 0.83]
     init_rot: [1.0, 0.0, 0.0, 0.0]
+    reset:
+      sampler: sobol
+      seed: 0
+      pos_range:
+        x: [-0.03, 0.03]
+        y: [-0.03, 0.03]
+      rot_range:
+        rz: [-0.2, 0.2]
     use_default_sdf_collision: true
     physics_material:
       static_friction: 1.2

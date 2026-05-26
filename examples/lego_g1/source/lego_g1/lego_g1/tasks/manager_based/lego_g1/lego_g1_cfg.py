@@ -343,7 +343,7 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
             mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, -0.2, 0.8), rot=(1.0, 0.0, 0.0, 0.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, -0.2, 0.82), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
     red_brick: RigidObjectCfg = RigidObjectCfg(
@@ -356,7 +356,7 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
             mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
             collision_props=sim_utils.CollisionPropertiesCfg(),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, 0.2, 0.8), rot=(1.0, 0.0, 0.0, 0.0)),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, 0.2, 0.82), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
 # =====================================================================
@@ -586,7 +586,33 @@ class LegoG1ObservationsCfg:
 # =====================================================================
 @configclass
 class LegoG1EventCfg:
-    reset_all = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
+    reset_all = None
+
+    reset_robot = EventTerm(
+        func=mdp.reset_robot_to_default,
+        mode="reset",
+        params={"asset_cfg": SceneEntityCfg("unitree_g1")},
+    )
+
+    reset_sobol_objects = EventTerm(
+        func=mdp.reset_root_state_sobol,
+        mode="reset",
+        params={
+            "asset_cfgs": {
+                "blue_brick": SceneEntityCfg("blue_brick"),
+                "red_brick": SceneEntityCfg("red_brick"),
+            },
+            "pose_ranges": {
+                "blue_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03)},
+                "red_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03)},
+            },
+            "velocity_ranges": {
+                "blue_brick": {},
+                "red_brick": {},
+            },
+            "seed": 0,
+        },
+    )
 
 
 @configclass
