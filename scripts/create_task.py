@@ -199,6 +199,23 @@ class SubtaskTermSpec(BaseModel):
     params: dict[str, Any] = {}
 
 
+class TerminationSpec(BaseModel):
+    """Declarative binding for a ``DoneTerm`` entry on ``TerminationsCfg``.
+
+    The YAML key becomes the cfg attribute name; ``func`` resolves to a
+    function in the generated ``mdp/terminations.py``. As with
+    ``subtask_terms``, several terminations can share one underlying function
+    differentiated by params — the generator emits one stub per unique func
+    with the union of parameter names and inferred types.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    func: str
+    params: dict[str, Any] = {}
+    time_out: bool = False
+
+
 class MimicConfig(BaseModel):
     """Optional Mimic data-generation configuration.
 
@@ -236,6 +253,12 @@ class TaskDefinition(BaseModel):
     # signatures. When omitted, each declared signal gets its own zero-stub
     # function and an ObsTerm with only the signal_name param.
     subtask_terms: dict[str, SubtaskTermSpec] = {}
+    # Optional DoneTerm entries on TerminationsCfg, keyed by the cfg attribute
+    # name (e.g. ``success``). Each entry binds an MDP function + params; the
+    # generator emits a typed stub in mdp/terminations.py and wires a DoneTerm
+    # on TerminationsCfg. ``time_out`` defaults to False; ``time_out`` and
+    # ``reset_all`` are reserved attribute names and cannot be reused here.
+    terminations: dict[str, TerminationSpec] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -370,6 +393,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
     eef_slices = _build_eef_slices(cfg)
     cameras = _build_cameras_context(cfg)
     subtask_terms = _build_subtask_signal_context(cfg)
+    terminations = _build_terminations_context(cfg)
 
     title = f"IL Task: {class_prefix}"
     description = f"Imitation-learning task extension for {class_prefix} ({cfg.task_id})"
@@ -442,6 +466,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "xr_anchor_rot": _join_floats(cfg.teleop.xr_anchor_rot),
         },
         "subtask_terms": subtask_terms,
+        "terminations": terminations,
         "mimic": _build_mimic_context(cfg, class_prefix),
     }
 
@@ -682,6 +707,73 @@ def _build_subtask_signal_context(cfg: TaskDefinition) -> dict[str, Any]:
         funcs_out.append({"name": fn, "params": params_def})
 
     return {"signals": signals_out, "funcs": funcs_out}
+
+
+# Attribute names reserved by the generated TerminationsCfg / EventCfg blocks.
+# YAML entries that collide with these would silently shadow the built-ins.
+_RESERVED_TERMINATION_NAMES = {"time_out"}
+
+
+def _build_terminations_context(cfg: TaskDefinition) -> dict[str, Any]:
+    """Build the terminations context block for the templates.
+
+    Output shape mirrors ``_build_subtask_signal_context``::
+
+        {
+            "terms":  [{"name": "success", "func": "...", "time_out": False,
+                        "params": [(key, py_literal), ...]}],
+            "funcs":  [{"name": "bricks_released_at_targets",
+                        "params": [{"name": "...", "type": "..."}, ...]}],
+        }
+
+    ``terms`` is the per-DoneTerm list rendered onto ``TerminationsCfg``.
+    ``funcs`` is the deduplicated set of underlying MDP functions; each carries
+    the merged set of parameter names with inferred types so a single stub
+    can back multiple terms (same trick as subtask_terms).
+    """
+    if not cfg.terminations:
+        return {"terms": [], "funcs": []}
+
+    terms_out: list[dict[str, Any]] = []
+    func_params: dict[str, dict[str, Optional[str]]] = {}
+    func_order: list[str] = []
+
+    for name, spec in cfg.terminations.items():
+        if name in _RESERVED_TERMINATION_NAMES:
+            raise ValueError(
+                f"terminations.{name} clashes with a built-in DoneTerm; "
+                f"pick a different attribute name."
+            )
+
+        rendered_params: list[tuple[str, str]] = [
+            (k, _py_value(v)) for k, v in spec.params.items()
+        ]
+        terms_out.append({
+            "name": name,
+            "func": spec.func,
+            "time_out": spec.time_out,
+            "params": rendered_params,
+        })
+
+        if spec.func not in func_params:
+            func_params[spec.func] = {}
+            func_order.append(spec.func)
+        merged = func_params[spec.func]
+        for k, v in spec.params.items():
+            inferred = _infer_param_type(v)
+            if k not in merged:
+                merged[k] = inferred
+            elif merged[k] is None and inferred is not None:
+                merged[k] = inferred
+
+    funcs_out: list[dict[str, Any]] = []
+    for fn in func_order:
+        params_def: list[dict[str, Optional[str]]] = [
+            {"name": name, "type": ty} for name, ty in func_params[fn].items()
+        ]
+        funcs_out.append({"name": fn, "params": params_def})
+
+    return {"terms": terms_out, "funcs": funcs_out}
 
 
 # SubTaskConfig fields that are declared as tuples upstream. YAML reads them as

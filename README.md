@@ -35,6 +35,10 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
   registers a sibling `<task_id>-Mimic` gym env and emits a
   `SubTaskConfig`-driven Mimic cfg. Pair it with `subtask_terms:` and the
   generator stubs out the MDP predicates with inferred type signatures.
+- **Declarative `DoneTerm`s.** Optional `terminations:` block wires extra
+  `DoneTerm` entries (e.g. a Mimic-style `success` criterion) onto
+  `TerminationsCfg` and stubs the matching predicates in `mdp/terminations.py`
+  with inferred type signatures — same DRY collapsing as `subtask_terms`.
 - **No script forking.** Generated extensions install a `.pth` file that
   auto-registers gym envs on Python startup, so IsaacLab's stock scripts
   (`teleop_se3_agent.py`, `record_annotated_demos.py`, `random_agent.py`,
@@ -437,6 +441,42 @@ subtask_terms:
 
 If `subtask_terms` is omitted but `mimic.subtasks` declares signals, the
 generator falls back to one zero-returning stub per signal.
+
+### `terminations` (optional)
+
+Extra `DoneTerm` entries on the generated `TerminationsCfg`. The YAML key
+becomes the cfg attribute name; `func` resolves to a function emitted into
+`mdp/terminations.py`. As with `subtask_terms`, multiple terms can share one
+function — the generator emits a single stub whose signature carries the
+union of every param used.
+
+```yaml
+terminations:
+  success:
+    func: bricks_released_at_targets                # MDP function name
+    time_out: false                                 # optional; default false
+    params:                                         # kwargs forwarded to the function
+      left_object_name: red_brick
+      right_object_name: blue_brick
+      left_target_pos: [-0.4, 0.05, 0.83]
+      right_target_pos: [-0.4, -0.05, 0.83]
+      target_dist_threshold: 0.29
+      left_gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      right_gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_open_threshold: 0.15
+```
+
+- **`func`** — name of the MDP function emitted into `mdp/terminations.py`.
+  The generated stub returns `torch.zeros(env.num_envs, dtype=torch.bool, ...)` —
+  fill in the body to compute the actual predicate.
+- **`params`** — kwargs passed to the function. Parameter types are inferred
+  from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`) and used
+  to type the generated stub's signature.
+- **`time_out`** — defaults to `false`. Set `true` only for "ran out of time"
+  terminations; the conventional success signal used by Mimic data
+  generation keeps the default.
+- **Reserved names** — the attribute name `time_out` is taken by the
+  built-in `DoneTerm`. Pick anything else (`success`, `object_dropped`, …).
 
 ### `mimic` (optional)
 

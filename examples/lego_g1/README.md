@@ -303,6 +303,42 @@ subtask_terms:
   from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`) and used
   to type the generated stub's signature.
 
+### `terminations` (optional)
+
+Extra `DoneTerm` entries on the generated `TerminationsCfg`. The YAML key
+becomes the cfg attribute name; `func` resolves to a function in the
+generated `mdp/terminations.py`. The generator stubs each unique function
+with an inferred type signature (returning `False` for every env); you fill
+in the body.
+
+```yaml
+terminations:
+  success:
+    func: bricks_released_at_targets                # MDP function name
+    time_out: false                                 # optional; default false
+    params:                                         # kwargs forwarded to the function
+      left_object_name: red_brick
+      right_object_name: blue_brick
+      left_target_pos: [-0.4, 0.05, 0.83]
+      right_target_pos: [-0.4, -0.05, 0.83]
+      target_dist_threshold: 0.29
+      left_gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      right_gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_open_threshold: 0.15
+```
+
+- **`func`** — name of the MDP function emitted into `mdp/terminations.py`.
+  Multiple termination entries can share one function (DRY); params are
+  unioned and the stub signature carries every distinct parameter.
+- **`params`** — kwargs passed to that function. Parameter types are
+  inferred from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`)
+  and used to type the generated stub's signature.
+- **`time_out`** — defaults to `false`. Set `true` only for "ran out of time"
+  terminations; the conventional success signal used by Mimic data
+  generation keeps the default.
+- **Reserved names** — the attribute name `time_out` is taken by the
+  built-in DoneTerm. Pick anything else (`success`, `object_dropped`, …).
+
 ### `mimic` (optional — Mimic data-generation pipeline)
 
 When present, a sibling `<task_id>-Mimic` env is registered with a cfg class

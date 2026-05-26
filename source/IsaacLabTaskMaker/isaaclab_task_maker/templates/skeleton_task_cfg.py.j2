@@ -550,6 +550,19 @@ class {{ class_prefix }}EventCfg:
 @configclass
 class {{ class_prefix }}TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+{% for term in terminations.terms %}
+    {{ term.name }} = DoneTerm(
+        func=mdp.{{ term.func }},
+{% if term.params %}
+        params={
+{% for k, v in term.params %}
+            "{{ k }}": {{ v }},
+{% endfor %}
+        },
+{% endif %}
+        time_out={{ term.time_out }},
+    )
+{% endfor %}
 
 
 # =====================================================================

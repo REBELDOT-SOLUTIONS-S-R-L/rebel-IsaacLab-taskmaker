@@ -9,6 +9,15 @@ Add custom termination conditions here. They will be available as `mdp.<func_nam
 in your task config's TerminationsCfg.
 
 Base terminations (time_out, etc.) are already available from isaaclab.envs.mdp.
+{% if terminations.funcs %}
+
+This module defines the **termination predicates** declared under
+``terminations:`` in the task YAML. Each function returns a ``(num_envs,)``
+bool tensor that is ``True`` where the env should end for that reason
+(e.g. the success criterion for the Mimic data-generation pipeline). The
+bodies below are auto-generated stubs that always return ``False`` — fill
+them in once you have a feel for the geometry of the task.
+{% endif %}
 """
 
 from __future__ import annotations
@@ -21,8 +30,34 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+{% if terminations.funcs %}
+# ---------------------------------------------------------------------------
+# Termination predicates (DoneTerm functions)
+# ---------------------------------------------------------------------------
+{% for fn in terminations.funcs %}
+def {{ fn.name }}(
+    env: "ManagerBasedRLEnv",
+{% for p in fn.params %}
+{% if p.type %}
+    {{ p.name }}: {{ p.type }},
+{% else %}
+    {{ p.name }},
+{% endif %}
+{% endfor %}
+) -> torch.Tensor:
+    """TODO: implement the ``{{ fn.name }}`` termination predicate.
+
+    Should return a ``(num_envs,)`` bool tensor that is ``True`` where the
+    env should terminate for this reason and ``False`` otherwise.
+    """
+    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+
+{% endfor %}
+{% else %}
 # Example: uncomment and customize
 # def object_dropped(env: ManagerBasedRLEnv) -> torch.Tensor:
 #     """Terminate if the object falls below a threshold."""
 #     object_pos = env.scene["object"].data.root_pos_w
 #     return object_pos[:, 2] < 0.1
+{% endif %}

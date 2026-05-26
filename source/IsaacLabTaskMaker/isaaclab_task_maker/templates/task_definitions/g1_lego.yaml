@@ -341,6 +341,30 @@ subtask_terms:
       gripper_open_threshold: 0.15
 
 
+# ─── TERMINATIONS (optional) ─────────────────────────────────
+# Extra `DoneTerm` entries on `TerminationsCfg`. Each key becomes a cfg
+# attribute name; `func` resolves to a function in the generated
+# `mdp/terminations.py`. The generator emits a typed stub per unique
+# function (the body returns `False` for every env until you fill it in).
+#
+# `time_out=True` marks a "ran out of time" termination; the conventional
+# success signal used by the Mimic data-generation pipeline keeps the
+# default `time_out=False`. The attribute name `time_out` is reserved by
+# the built-in DoneTerm and cannot be reused here.
+terminations:
+  success:
+    func: bricks_released_at_targets
+    params:
+      left_object_name: red_brick
+      right_object_name: blue_brick
+      left_target_pos: [-0.4, 0.05, 0.83]
+      right_target_pos: [-0.4, -0.05, 0.83]
+      target_dist_threshold: 0.29
+      left_gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      right_gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_open_threshold: 0.15
+
+
 # ─── MIMIC DATA GENERATION (optional) ────────────────────────
 # When present, an additional `<task_id>-Mimic` gym env is registered
 # alongside the base task. Its cfg class (`<ClassPrefix>MimicEnvCfg`)
