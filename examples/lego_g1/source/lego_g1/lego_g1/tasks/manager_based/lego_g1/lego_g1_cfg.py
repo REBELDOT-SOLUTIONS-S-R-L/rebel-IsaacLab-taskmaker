@@ -435,7 +435,7 @@ _RIGHT_GRIPPER_JOINTS = r"R_(index_proximal_joint|middle_proximal_joint|thumb_pr
 
 # Dummy thresholds — replace with values derived from real demos.
 _DIST_TO_BRICK_THRESHOLD = 0.2            # m  (eef ↔ brick)
-_BRICK_TO_TARGET_THRESHOLD = 0.29          # m  (brick ↔ placement target)
+_BRICK_TO_TARGET_THRESHOLD = 0.31          # m  (brick ↔ placement target)
 _GRIPPER_CLOSED_THRESHOLD = 0.5            # rad  (proximal joint mean)
 _GRIPPER_OPEN_THRESHOLD = 0.15              # rad  (proximal joint mean)
 
