@@ -42,7 +42,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
         # ── datagen_config ────────────────────────────────────────────────
         self.datagen_config.name = "demo_src_lego_g1_D0"
         self.datagen_config.generation_guarantee = True
-        self.datagen_config.generation_keep_failed = False
+        self.datagen_config.generation_keep_failed = True
         self.datagen_config.generation_num_trials = 1000
         self.datagen_config.generation_select_src_per_subtask = False
         self.datagen_config.generation_select_src_per_arm = False

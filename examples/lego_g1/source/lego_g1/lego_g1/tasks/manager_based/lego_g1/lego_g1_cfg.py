@@ -592,6 +592,19 @@ class LegoG1EventCfg:
 @configclass
 class LegoG1TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
+    success = DoneTerm(
+        func=mdp.bricks_released_at_targets,
+        params={
+            "left_object_name": _LEFT_BRICK,
+            "right_object_name": _RIGHT_BRICK,
+            "left_target_pos": _LEFT_TARGET_POS,
+            "right_target_pos": _RIGHT_TARGET_POS,
+            "target_dist_threshold": _BRICK_TO_TARGET_THRESHOLD,
+            "left_gripper_joint_pattern": _LEFT_GRIPPER_JOINTS,
+            "right_gripper_joint_pattern": _RIGHT_GRIPPER_JOINTS,
+            "gripper_open_threshold": _GRIPPER_OPEN_THRESHOLD,
+        },
+    )
 
 
 # =====================================================================

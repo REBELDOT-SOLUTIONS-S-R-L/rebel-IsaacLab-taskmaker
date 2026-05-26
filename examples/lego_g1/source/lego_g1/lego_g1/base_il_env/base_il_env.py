@@ -75,8 +75,8 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
     ) -> torch.Tensor:
         """Convert target EEF poses + gripper actions into an env action tensor.
 
-        Builds the action by iterating over ``cfg.eef_names`` and concatenating
-        ``[pos(3), quat(4), gripper(N)]`` for each arm.
+        Builds the action tensor in the environment action layout described by
+        ``cfg.eef_action_slices`` and ``cfg.eef_gripper_slices``.
 
         Args:
             target_eef_pose_dict: Maps eef_name -> 4x4 target pose.
@@ -87,7 +87,17 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
         Returns:
             Flat action tensor compatible with env.step().
         """
-        parts = []
+        action_dim = 0
+        for eef_name in self.cfg.eef_names:
+            slices = self.cfg.eef_action_slices[eef_name]
+            action_dim = max(action_dim, slices["pos"][1], slices["quat"][1])
+            gripper_sel = self.cfg.eef_gripper_slices[eef_name]
+            if isinstance(gripper_sel, tuple) and len(gripper_sel) == 2:
+                action_dim = max(action_dim, gripper_sel[1])
+            else:
+                action_dim = max(action_dim, max(gripper_sel, default=-1) + 1)
+
+        action = None
 
         for eef_name in self.cfg.eef_names:
             target_pose = target_eef_pose_dict[eef_name]
@@ -103,9 +113,31 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
                 target_pos = target_pos + pos_noise
                 target_quat = target_quat + quat_noise
 
-            parts.append(torch.cat((target_pos, target_quat, gripper_action), dim=0))
+            if action is None:
+                action = torch.zeros(
+                    (*target_pos.shape[:-1], action_dim),
+                    dtype=target_pos.dtype,
+                    device=target_pos.device,
+                )
 
-        return torch.cat(parts, dim=0)
+            slices = self.cfg.eef_action_slices[eef_name]
+            pos_s, pos_e = slices["pos"]
+            quat_s, quat_e = slices["quat"]
+            action[..., pos_s:pos_e] = target_pos
+            action[..., quat_s:quat_e] = target_quat
+
+            gripper_sel = self.cfg.eef_gripper_slices[eef_name]
+            if isinstance(gripper_sel, tuple) and len(gripper_sel) == 2:
+                g_start, g_end = gripper_sel
+                action[..., g_start:g_end] = gripper_action
+            else:
+                idx = torch.as_tensor(gripper_sel, dtype=torch.long, device=action.device)
+                action[..., idx] = gripper_action
+
+        if action is None:
+            raise ValueError("Cannot build action because cfg.eef_names is empty.")
+
+        return action
 
     # ------------------------------------------------------------------
     # 3) action_to_target_eef_pose
