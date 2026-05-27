@@ -1,6 +1,7 @@
 # IsaacLab Task Maker
 
-Config-only imitation-learning task creation for [Isaac Lab](https://github.com/isaac-sim/IsaacLab).
+Config-only imitation-learning task creation for the
+[REBELDOT Isaac Lab fork](https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab).
 
 Define a task in **one YAML file**, run `create_task.py`, get back a complete
 standalone Isaac Lab extension with the scene, controller, observations,
@@ -56,7 +57,9 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
 
 ## Prerequisites
 
-- [Isaac Lab](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/index.html) installed (conda or uv).
+- The [REBELDOT Isaac Lab fork](https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab)
+  installed (conda or uv). The taskmaker-generated projects depend on hooks
+  and script support from this fork; upstream Isaac Lab is not sufficient.
 - Python 3.10+.
 
 ## Installation
@@ -87,7 +90,7 @@ The script prints the exact next steps. In short:
 # 2. Install the generated extension (writes a .pth that auto-registers gyms).
 pip install -e examples/lego_g1/source/lego_g1
 
-# 3. Run any stock IsaacLab script against the task.
+# 3. Run any stock script from the REBELDOT Isaac Lab fork against the task.
 cd <IsaacLab-dir>
 ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py \
     --task IL-LEGO-G1-v0 --enable_pinocchio --teleop_device handtracking
