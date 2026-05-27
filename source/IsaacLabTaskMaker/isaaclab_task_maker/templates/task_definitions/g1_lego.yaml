@@ -75,6 +75,7 @@ scene:
 #                                   dynamic_friction  (default 0.5)
 #                                   restitution       (default 0.0)
 #                               Omit to inherit the simulation's default material.
+#   visual_material:            Optional. Name under the scene USD's Looks scope to bind.
 #   reset:                      Optional. When omitted, reset_scene_to_default uses
 #                               init_pos/init_rot only. sampler defaults to uniform.
 #                               sampler: uniform | sobol
@@ -86,9 +87,9 @@ scene_objects:
   - name: blue_brick
     type: RigidObjectCfg
     prim_path: "{ENV_REGEX_NS}/blue_brick"
-    usd_file: lego/brick_2x2.usd
-    scale: [0.0005, 0.0005, 0.0005]
-    init_pos: [-0.5, -0.15, 0.82]
+    usd_file: lego/brick_2x2_centered.usdc
+    scale: [0.3, 0.3, 0.3]
+    init_pos: [-0.7, -0.2, 0.82]
     init_rot: [1.0, 0.0, 0.0, 0.0]
     reset:
       sampler: sobol
@@ -96,19 +97,18 @@ scene_objects:
       pos_range:
         x: [-0.03, 0.03]
         y: [-0.03, 0.03]
-      rot_range:
-        rz: [-0.2, 0.2]
     use_default_sdf_collision: true
     physics_material:
       static_friction: 1.2
       dynamic_friction: 1.0
       restitution: 0.0
+    visual_material: blue
   - name: red_brick
     type: RigidObjectCfg
     prim_path: "{ENV_REGEX_NS}/red_brick"
-    usd_file: lego/brick_2x2.usd
-    scale: [0.0005, 0.0005, 0.0005]
-    init_pos: [-0.5, 0.15, 0.83]
+    usd_file: lego/brick_2x2_centered.usdc
+    scale: [0.3, 0.3, 0.3]
+    init_pos: [-0.7, 0.2, 0.82]
     init_rot: [1.0, 0.0, 0.0, 0.0]
     reset:
       sampler: sobol
@@ -116,13 +116,12 @@ scene_objects:
       pos_range:
         x: [-0.03, 0.03]
         y: [-0.03, 0.03]
-      rot_range:
-        rz: [-0.2, 0.2]
     use_default_sdf_collision: true
     physics_material:
       static_friction: 1.2
       dynamic_friction: 1.0
       restitution: 0.0
+    visual_material: red
 
 
 # ─── IK CONTROLLER ───────────────────────────────────────────
@@ -195,17 +194,34 @@ ik_controller:
 #                         tasks with hand joints, so the generator can build
 #                         per-arm gripper index lists for BaseILEnv. Inspire
 #                         hands prefix every joint with "L_" / "R_".
+#   virtual_links:        Optional fixed child links added to the spawned USD and
+#                         Pink URDF. Used here for task-local hand-center EEF frames.
 eef:
   names: ["left", "right"]
   target_links:
-    left_wrist: left_wrist_yaw_link
-    right_wrist: right_wrist_yaw_link
+    left_wrist: left_hand_center_eef
+    right_wrist: right_hand_center_eef
   frame_names:
-    left: g1_29dof_rev_1_0_left_wrist_yaw_link
-    right: g1_29dof_rev_1_0_right_wrist_yaw_link
+    left: g1_29dof_rev_1_0_left_hand_center_eef
+    right: g1_29dof_rev_1_0_right_hand_center_eef
   hand_joint_prefixes:
     left: "L_"
     right: "R_"
+  virtual_links:
+    left:
+      link_name: left_hand_center_eef
+      usd_parent_path: "/Robot/left_wrist_yaw_link/L_hand_base_link"
+      urdf_frame_name: g1_29dof_rev_1_0_left_hand_center_eef
+      urdf_parent_link: L_hand_base_link
+      urdf_parent_fallback: g1_29dof_rev_1_0_left_wrist_yaw_link
+      offset: [0.05, 0.0, 0.0]
+    right:
+      link_name: right_hand_center_eef
+      usd_parent_path: "/Robot/right_wrist_yaw_link/R_hand_base_link"
+      urdf_frame_name: g1_29dof_rev_1_0_right_hand_center_eef
+      urdf_parent_link: R_hand_base_link
+      urdf_parent_fallback: g1_29dof_rev_1_0_right_wrist_yaw_link
+      offset: [0.05, 0.0, 0.0]
 
 
 # ─── OBSERVATIONS ────────────────────────────────────────────
@@ -213,8 +229,8 @@ eef:
 # Must match target_links values (the robot link names, not URDF frames).
 observations:
   eef_link_names:
-    left: left_wrist_yaw_link
-    right: right_wrist_yaw_link
+    left: left_hand_center_eef
+    right: right_hand_center_eef
 
 
 # ─── CAMERAS (optional) ──────────────────────────────────────
@@ -301,7 +317,7 @@ teleop:
 # env_spacing:      Distance between parallel environments in meters
 sim:
   decimation: 6
-  episode_length_s: 20.0
+  episode_length_s: 30.0
   dt: 0.008333
   render_interval: 2
   env_spacing: 2.5
@@ -325,55 +341,67 @@ subtask_terms:
   grasp_brick_left:
     func: grasp_brick_done
     params:
-      eef_link: left_wrist_yaw_link
+      eef_link: left_hand_center_eef
       object_name: red_brick
-      dist_threshold: 0.25
-      gripper_joint_pattern: "L_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
+      dist_threshold: 0.2
+      gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_closed_threshold: 0.5
   move_brick_left:
     func: move_brick_done
     params:
-      eef_link: left_wrist_yaw_link
+      eef_link: left_hand_center_eef
       object_name: red_brick
       target_pos: [-0.4, 0.05, 0.83]
-      eef_dist_threshold: 0.25
-      target_dist_threshold: 0.34
-      gripper_joint_pattern: "L_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
+      eef_dist_threshold: 0.2
+      target_dist_threshold: 0.31
+      gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_closed_threshold: 0.5
   release_brick_left:
     func: release_brick_done
     params:
       object_name: red_brick
       target_pos: [-0.4, 0.05, 0.83]
-      target_dist_threshold: 0.34
-      gripper_joint_pattern: "L_.*_proximal_joint"
+      target_dist_threshold: 0.31
+      gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
       gripper_open_threshold: 0.15
+  idle_left:
+    func: idle_done
+    params:
+      eef_link: left_hand_center_eef
+      idle_pos: [-0.3, 0.3, 1.2]
+      threshold: [0.1, 0.1, 0.1]
   grasp_brick_right:
     func: grasp_brick_done
     params:
-      eef_link: right_wrist_yaw_link
+      eef_link: right_hand_center_eef
       object_name: blue_brick
-      dist_threshold: 0.25
-      gripper_joint_pattern: "R_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
+      dist_threshold: 0.2
+      gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_closed_threshold: 0.5
   move_brick_right:
     func: move_brick_done
     params:
-      eef_link: right_wrist_yaw_link
+      eef_link: right_hand_center_eef
       object_name: blue_brick
       target_pos: [-0.4, -0.05, 0.83]
-      eef_dist_threshold: 0.25
-      target_dist_threshold: 0.34
-      gripper_joint_pattern: "R_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
+      eef_dist_threshold: 0.2
+      target_dist_threshold: 0.31
+      gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
+      gripper_closed_threshold: 0.5
   release_brick_right:
     func: release_brick_done
     params:
       object_name: blue_brick
       target_pos: [-0.4, -0.05, 0.83]
-      target_dist_threshold: 0.34
-      gripper_joint_pattern: "R_.*_proximal_joint"
+      target_dist_threshold: 0.31
+      gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
       gripper_open_threshold: 0.15
+  idle_right:
+    func: idle_done
+    params:
+      eef_link: right_hand_center_eef
+      idle_pos: [-0.3, -0.3, 1.2]
+      threshold: [0.1, 0.1, 0.1]
 
 
 # ─── TERMINATIONS (optional) ─────────────────────────────────
@@ -394,7 +422,7 @@ terminations:
       right_object_name: blue_brick
       left_target_pos: [-0.4, 0.05, 0.83]
       right_target_pos: [-0.4, -0.05, 0.83]
-      target_dist_threshold: 0.29
+      target_dist_threshold: 0.31
       left_gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
       right_gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
       gripper_open_threshold: 0.15
@@ -418,7 +446,7 @@ mimic:
   datagen:
     name: demo_src_lego_g1_D0
     generation_guarantee: true
-    generation_keep_failed: false
+    generation_keep_failed: true
     generation_num_trials: 1000
     generation_select_src_per_subtask: false
     generation_select_src_per_arm: false
@@ -432,48 +460,6 @@ mimic:
   # The final subtask of each arm uses `null` per IsaacLab convention —
   # it represents "run until end of demo".
   subtasks:
-    right:
-      - object_ref: blue_brick
-        subtask_term_signal: grasp_brick_right
-        first_subtask_start_offset_range: [0, 0]
-        subtask_term_offset_range: [0, 0]
-        selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs:
-          nn_k: 3
-        action_noise: 0.003
-        num_interpolation_steps: 0
-        num_fixed_steps: 0
-        apply_noise_during_interpolation: false
-      - object_ref: blue_brick
-        subtask_term_signal: move_brick_right
-        subtask_term_offset_range: [0, 0]
-        selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs:
-          nn_k: 3
-        action_noise: 0.003
-        num_interpolation_steps: 3
-        num_fixed_steps: 0
-        apply_noise_during_interpolation: false
-      - object_ref: blue_brick
-        subtask_term_signal: release_brick_right
-        subtask_term_offset_range: [0, 0]
-        selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs:
-          nn_k: 3
-        action_noise: 0.003
-        num_interpolation_steps: 0
-        num_fixed_steps: 0
-        apply_noise_during_interpolation: false
-      - object_ref: blue_brick
-        subtask_term_signal: null
-        subtask_term_offset_range: [0, 0]
-        selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs:
-          nn_k: 3
-        action_noise: 0.003
-        num_interpolation_steps: 0
-        num_fixed_steps: 0
-        apply_noise_during_interpolation: false
     left:
       - object_ref: red_brick
         subtask_term_signal: grasp_brick_left
@@ -507,6 +493,48 @@ mimic:
         num_fixed_steps: 0
         apply_noise_during_interpolation: false
       - object_ref: red_brick
+        subtask_term_signal: null
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+    right:
+      - object_ref: blue_brick
+        subtask_term_signal: grasp_brick_right
+        first_subtask_start_offset_range: [0, 0]
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: blue_brick
+        subtask_term_signal: move_brick_right
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 3
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: blue_brick
+        subtask_term_signal: release_brick_right
+        subtask_term_offset_range: [0, 0]
+        selection_strategy: nearest_neighbor_object
+        selection_strategy_kwargs:
+          nn_k: 3
+        action_noise: 0.003
+        num_interpolation_steps: 0
+        num_fixed_steps: 0
+        apply_noise_during_interpolation: false
+      - object_ref: blue_brick
         subtask_term_signal: null
         subtask_term_offset_range: [0, 0]
         selection_strategy: nearest_neighbor_object

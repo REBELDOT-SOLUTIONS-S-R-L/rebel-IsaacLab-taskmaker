@@ -214,6 +214,7 @@ scene_objects:
       static_friction: 1.0
       dynamic_friction: 1.0
       restitution: 0.0
+    visual_material: blue                         # optional Scene/Looks material
   - name: object_2
     type: RigidObjectCfg
     prim_path: "{ENV_REGEX_NS}/object_2"
@@ -238,6 +239,9 @@ scene_objects:
 - **`physics_material`** — optional per-object friction / restitution override
   (`static_friction`, `dynamic_friction`, `restitution`). Omit the block to
   inherit the simulation defaults.
+- **`visual_material`** — optional look name under the scene USD's `Looks`
+  scope. When set, the generated spawner binds
+  `{ENV_REGEX_NS}/Scene/Looks/<visual_material>` to the object after spawn.
 
 #### Per-object reset randomization
 
@@ -345,6 +349,14 @@ eef:
   hand_joint_prefixes:                            # per-arm `hand_joint_names` prefix
     left:  "L_"
     right: "R_"
+  virtual_links:                                  # optional USD + URDF fixed EEF frames
+    left:
+      link_name: left_hand_center_eef             # USD body name to create
+      usd_parent_path: "/Robot/left_wrist_link"   # parent path inside the robot USD
+      urdf_frame_name: robot_left_hand_center_eef # URDF link name Pink IK tracks
+      urdf_parent_link: left_wrist_link           # parent link suffix/name in the URDF
+      urdf_parent_fallback: robot_left_wrist_link # optional exact fallback
+      offset: [0.05, 0.0, 0.0]                    # fixed child offset, meters
 ```
 
 - **`names`** — logical EEF identifiers used by observations, subtasks, and
@@ -358,6 +370,12 @@ eef:
   hand joints)* — per-arm prefix of `hand_joint_names` entries that belong
   to each EEF. Without it the generator falls back to an even split, which
   only works when joints are pre-grouped by arm in `hand_joint_names`.
+- **`virtual_links`** *(optional, mainly for `pink_ik`)* — fixed task-local
+  EEF bodies generated into both the spawned robot USD and the Pink IK URDF.
+  Use this when the controller should track a convenient frame that is not
+  present in the source robot asset, such as a hand-center grasp frame.
+  `target_links` / `observations.eef_link_names` should refer to `link_name`,
+  while `frame_names` should refer to `urdf_frame_name`.
 
 ### `observations` (optional)
 

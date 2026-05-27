@@ -9,6 +9,9 @@ To customize further, edit this file directly after generation.
 """
 
 import os
+{% if eef.virtual_links %}
+import xml.etree.ElementTree as ET
+{% endif %}
 {% if controller_type == "pink_ik" %}
 
 import torch
@@ -106,6 +109,144 @@ _PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
 }
 
 {% endif %}
+{% if has_visual_materials %}
+# Visual material overrides keyed by spawned object leaf name. Values are
+# resolved under each env's Scene/Looks scope.
+_VISUAL_MATERIAL_COLORS: dict[str, str] = {
+{% for obj in scene_objects %}
+{% if obj.visual_material %}
+    "{{ obj.leaf }}": "{{ obj.visual_material }}",
+{% endif %}
+{% endfor %}
+}
+
+{% endif %}
+{% if eef.virtual_links %}
+_VIRTUAL_EEF_LINKS = [
+{% for link in eef.virtual_links %}
+    {
+        "link_name": "{{ link.link_name }}",
+        "usd_parent_path": "{{ link.usd_parent_path }}",
+        "urdf_frame_name": "{{ link.urdf_frame_name }}",
+        "urdf_parent_link": "{{ link.urdf_parent_link }}",
+        "urdf_parent_fallback": {{ link.urdf_parent_fallback | pyrepr }},
+        "offset": {{ link.offset_literal }},
+    },
+{% endfor %}
+]
+
+
+def _add_virtual_eef_links_to_stage(robot_prim_path: str) -> None:
+    """Add task-local fixed EEF links to a spawned robot prim."""
+    from pxr import Gf, Sdf, UsdGeom, UsdPhysics
+
+    stage = sim_utils.get_current_stage()
+
+    for link in _VIRTUAL_EEF_LINKS:
+        parent_suffix = link["usd_parent_path"].removeprefix("/Robot")
+        parent_sdf_path = Sdf.Path(f"{robot_prim_path}{parent_suffix}")
+        parent_prim = stage.GetPrimAtPath(parent_sdf_path)
+        if not parent_prim.IsValid():
+            raise RuntimeError(
+                f"Cannot add '{link['link_name']}': USD parent prim does not exist at '{parent_sdf_path}'."
+            )
+
+        offset = link["offset"]
+        eef_path = parent_sdf_path.AppendChild(link["link_name"])
+        eef_xform = UsdGeom.Xform.Define(stage, eef_path)
+        eef_xform.SetResetXformStack(True)
+        eef_xform.AddTranslateOp().Set(Gf.Vec3d(*offset))
+
+        eef_prim = eef_xform.GetPrim()
+        rigid_body = UsdPhysics.RigidBodyAPI.Apply(eef_prim)
+        rigid_body.CreateRigidBodyEnabledAttr(True)
+        UsdPhysics.MassAPI.Apply(eef_prim).CreateMassAttr(0.001)
+
+        joint = UsdPhysics.FixedJoint.Define(stage, parent_sdf_path.AppendChild(f"{link['link_name']}_fixed_joint"))
+        joint.CreateBody0Rel().SetTargets([parent_sdf_path])
+        joint.CreateBody1Rel().SetTargets([eef_path])
+        joint.CreateLocalPos0Attr(Gf.Vec3f(*offset))
+        joint.CreateLocalPos1Attr(Gf.Vec3f(0.0, 0.0, 0.0))
+        joint.CreateLocalRot0Attr(Gf.Quatf(1.0, Gf.Vec3f(0.0, 0.0, 0.0)))
+        joint.CreateLocalRot1Attr(Gf.Quatf(1.0, Gf.Vec3f(0.0, 0.0, 0.0)))
+
+
+def _find_urdf_link_name(root: ET.Element, suffix: str, fallback: str | None = None) -> str:
+    for link in root.findall("link"):
+        name = link.get("name")
+        if name == suffix or (name is not None and name.endswith(f"_{suffix}")):
+            return name
+    if fallback is not None and root.find(f"./link[@name='{fallback}']") is not None:
+        return fallback
+    raise ValueError(f"Could not find URDF link ending in '{suffix}'.")
+
+
+def _ensure_urdf_fixed_child_link(
+    root: ET.Element,
+    *,
+    parent_link: str,
+    child_link: str,
+    joint_name: str,
+    xyz: tuple[float, float, float],
+) -> None:
+    if root.find(f"./link[@name='{child_link}']") is None:
+        ET.SubElement(root, "link", {"name": child_link})
+
+    joint = root.find(f"./joint[@name='{joint_name}']")
+    if joint is None:
+        joint = ET.SubElement(root, "joint", {"name": joint_name, "type": "fixed"})
+    else:
+        joint.set("type", "fixed")
+
+    for tag, link_name in (("parent", parent_link), ("child", child_link)):
+        elem = joint.find(tag)
+        if elem is None:
+            elem = ET.SubElement(joint, tag)
+        elem.set("link", link_name)
+
+    origin = joint.find("origin")
+    if origin is None:
+        origin = ET.SubElement(joint, "origin")
+    origin.set("xyz", f"{xyz[0]:g} {xyz[1]:g} {xyz[2]:g}")
+    origin.set("rpy", "0 0 0")
+
+
+def _patch_virtual_eef_links_into_urdf(urdf_path: str) -> None:
+    """Add task-local fixed EEF links to Pink's generated URDF."""
+    tree = ET.parse(urdf_path)
+    root = tree.getroot()
+
+    for link in _VIRTUAL_EEF_LINKS:
+        _ensure_urdf_fixed_child_link(
+            root,
+            parent_link=_find_urdf_link_name(
+                root,
+                link["urdf_parent_link"],
+                fallback=link["urdf_parent_fallback"],
+            ),
+            child_link=link["urdf_frame_name"],
+            joint_name=f"{link['urdf_frame_name']}_fixed_joint",
+            xyz=link["offset"],
+        )
+
+    ET.indent(tree, space="  ")
+    tree.write(urdf_path, encoding="utf-8", xml_declaration=True)
+
+
+@sim_utils.clone
+def spawn_robot_with_virtual_eefs(
+    prim_path: str,
+    cfg: UsdFileCfg,
+    translation: tuple[float, float, float] | None = None,
+    orientation: tuple[float, float, float, float] | None = None,
+    **kwargs,
+):
+    """Spawn the robot USD and add task-local fixed EEF bodies."""
+    prim = sim_utils.spawn_from_usd(prim_path, cfg, translation=translation, orientation=orientation, **kwargs)
+    _add_virtual_eef_links_to_stage(prim_path)
+    return prim
+
+{% endif %}
 def _apply_rigid_apis(
     prim_path: str,
     cfg: UsdFileCfg,
@@ -131,15 +272,24 @@ def _apply_rigid_apis(
     sim_utils.define_rigid_body_properties(prim_path, rigid_props)
     sim_utils.define_mass_properties(prim_path, mass_props)
     sim_utils.define_collision_properties(prim_path, collision_props)
-{% if has_physics_materials %}
+{% if has_physics_materials or has_visual_materials %}
 
-    # Apply per-object physics material (friction / restitution overrides).
     leaf = prim_path.rstrip("/").rsplit("/", 1)[-1]
+{% endif %}
+{% if has_physics_materials %}
+    # Apply per-object physics material (friction / restitution overrides).
     mat_cfg = _PHYSICS_MATERIALS.get(leaf)
     if mat_cfg is not None:
         mat_path = f"{prim_path}/physicsMaterial"
         mat_cfg.func(mat_path, mat_cfg)
         sim_utils.bind_physics_material(prim_path, mat_path)
+{% endif %}
+{% if has_visual_materials %}
+
+    color = _VISUAL_MATERIAL_COLORS.get(leaf)
+    if color is not None:
+        env_ns = prim_path.rstrip("/").rsplit("/", 1)[0]
+        sim_utils.bind_visual_material(prim_path, f"{env_ns}/Scene/Looks/{color}")
 {% endif %}
     return prim
 
@@ -716,11 +866,20 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
         self.xr_camera_reattach = attach_cameras
 {% endif %}
 {% if controller_type == "pink_ik" %}
+{% if eef.virtual_links %}
+
+        # Add task-local EEF bodies in the spawned USD stage, then mirror them
+        # into the generated URDF so observations and Pink IK use the same frames.
+        self.scene.{{ robot.name }}.spawn.func = spawn_robot_with_virtual_eefs
+{% endif %}
 
         # Convert USD to URDF for Pink IK
         temp_urdf_output_path, temp_urdf_meshes_output_path = ControllerUtils.convert_usd_to_urdf(
             self.scene.{{ robot.name }}.spawn.usd_path, self.temp_urdf_dir, force_conversion=True
         )
+{% if eef.virtual_links %}
+        _patch_virtual_eef_links_into_urdf(temp_urdf_output_path)
+{% endif %}
         self.actions.pink_ik_cfg.controller.urdf_path = temp_urdf_output_path
         self.actions.pink_ik_cfg.controller.mesh_path = temp_urdf_meshes_output_path
 

@@ -47,6 +47,42 @@ def get_eef_quat(env: ManagerBasedRLEnv, link_name: str) -> torch.Tensor:
     return eef_quat
 
 
+def get_object_pos(env: ManagerBasedRLEnv, object_name: str) -> torch.Tensor:
+    """Get object root position relative to env origin.
+
+    Args:
+        env: The environment instance.
+        object_name: Name of the object in the scene.
+
+    Returns:
+        Object position tensor of shape (num_envs, 3).
+    """
+    return env.scene[object_name].data.root_pos_w - env.scene.env_origins
+
+
+def get_proximal_joint_mean(env: ManagerBasedRLEnv, joint_pattern: str) -> torch.Tensor:
+    """Get mean joint position for matched proximal hand joints.
+
+    Args:
+        env: The environment instance.
+        joint_pattern: Joint name pattern forwarded to ``find_joints``.
+
+    Returns:
+        Mean joint position tensor of shape (num_envs,).
+    """
+    robot = env.scene["{{ robot.name }}"]
+    indexes, _ = robot.find_joints(joint_pattern)
+    if not indexes:
+        return torch.zeros(env.num_envs, device=env.device)
+    indexes = torch.tensor(indexes, dtype=torch.long, device=env.device)
+    return robot.data.joint_pos[:, indexes].mean(dim=1)
+
+
+def to_tensor(values, device) -> torch.Tensor:
+    """Convert values to a float tensor on the requested device."""
+    return torch.as_tensor(values, dtype=torch.float, device=device)
+
+
 def object_obs(
     env: ManagerBasedRLEnv,
     left_eef_link_name: str,
@@ -65,13 +101,9 @@ def object_obs(
     Returns:
         Observation tensor of shape (num_envs, 13).
     """
-    body_pos_w = env.scene["{{ robot.name }}"].data.body_pos_w
-    left_eef_idx = env.scene["{{ robot.name }}"].data.body_names.index(left_eef_link_name)
-    right_eef_idx = env.scene["{{ robot.name }}"].data.body_names.index(right_eef_link_name)
-    left_eef_pos = body_pos_w[:, left_eef_idx] - env.scene.env_origins
-    right_eef_pos = body_pos_w[:, right_eef_idx] - env.scene.env_origins
-
-    object_pos = env.scene["object"].data.root_pos_w - env.scene.env_origins
+    left_eef_pos = get_eef_pos(env, left_eef_link_name)
+    right_eef_pos = get_eef_pos(env, right_eef_link_name)
+    object_pos = get_object_pos(env, "object")
     object_quat = env.scene["object"].data.root_quat_w
 
     left_eef_to_object = object_pos - left_eef_pos

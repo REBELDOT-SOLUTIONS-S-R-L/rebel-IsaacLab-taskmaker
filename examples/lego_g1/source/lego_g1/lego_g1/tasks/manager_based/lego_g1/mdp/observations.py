@@ -26,43 +26,20 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from lego_g1.base_il_env.mdp.observations import (
+    get_eef_pos,
+    get_object_pos,
+    get_proximal_joint_mean,
+    to_tensor,
+)
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
 # ---------------------------------------------------------------------------
-# Internal helpers
+# Debug helpers
 # ---------------------------------------------------------------------------
-def _link_pos(env: "ManagerBasedRLEnv", link_name: str) -> torch.Tensor:
-    """World-frame position of a named robot link, minus the env origin."""
-    robot = env.scene["unitree_g1"]
-    idx = robot.data.body_names.index(link_name)
-    return robot.data.body_pos_w[:, idx] - env.scene.env_origins
-
-
-def _object_pos(env: "ManagerBasedRLEnv", object_name: str) -> torch.Tensor:
-    """Object root position, minus the env origin."""
-    return env.scene[object_name].data.root_pos_w - env.scene.env_origins
-
-
-def _proximal_joint_mean(env: "ManagerBasedRLEnv", joint_pattern: str) -> torch.Tensor:
-    """Mean joint position for an Inspire hand's proximal joints.
-
-    Larger value ⇒ fingers curled inwards (closed). The pattern is a regex
-    forwarded to ``ArticulationData.find_joints``, e.g. ``L_.*_proximal_joint``.
-    """
-    robot = env.scene["unitree_g1"]
-    idxs, _ = robot.find_joints(joint_pattern)
-    if not idxs:
-        return torch.zeros(env.num_envs, device=env.device)
-    idx_tensor = torch.tensor(idxs, dtype=torch.long, device=env.device)
-    return robot.data.joint_pos[:, idx_tensor].mean(dim=1)
-
-
-def _tensor(values, device) -> torch.Tensor:
-    return torch.as_tensor(values, dtype=torch.float, device=device)
-
-
 # Throttle subtask predicate prints so they don't flood stdout at sim rate.
 # Set LEGO_G1_DEBUG_SUBTASKS=0 to silence, or to an integer N to print every Nth call.
 _DEBUG_SUBTASKS_ENV = "LEGO_G1_DEBUG_SUBTASKS"
@@ -130,10 +107,10 @@ def grasp_brick_done(
 ) -> torch.Tensor:
     """Fires when the EEF is within ``dist_threshold`` of the brick AND the
     fingers' proximal joints are at least ``gripper_closed_threshold``."""
-    eef = _link_pos(env, eef_link)
-    obj = _object_pos(env, object_name)
+    eef = get_eef_pos(env, eef_link)
+    obj = get_object_pos(env, object_name)
     eef_obj_dist = torch.norm(eef - obj, dim=-1)
-    grip = _proximal_joint_mean(env, gripper_joint_pattern)
+    grip = get_proximal_joint_mean(env, gripper_joint_pattern)
     near = eef_obj_dist <= dist_threshold
     closed = grip >= gripper_closed_threshold
     done = (near & closed).float().unsqueeze(-1)
@@ -162,12 +139,12 @@ def move_brick_done(
 ) -> torch.Tensor:
     """Fires when the EEF still holds the brick (near + closed) AND the brick
     has been carried within ``target_dist_threshold`` of ``target_pos``."""
-    eef = _link_pos(env, eef_link)
-    obj = _object_pos(env, object_name)
-    target = _tensor(target_pos, env.device).expand_as(obj)
+    eef = get_eef_pos(env, eef_link)
+    obj = get_object_pos(env, object_name)
+    target = to_tensor(target_pos, env.device).expand_as(obj)
     eef_obj_dist = torch.norm(eef - obj, dim=-1)
     obj_tgt_dist = torch.norm(obj - target, dim=-1)
-    grip = _proximal_joint_mean(env, gripper_joint_pattern)
+    grip = get_proximal_joint_mean(env, gripper_joint_pattern)
     near_eef = eef_obj_dist <= eef_dist_threshold
     near_target = obj_tgt_dist <= target_dist_threshold
     closed = grip >= gripper_closed_threshold
@@ -177,8 +154,20 @@ def move_brick_done(
         signal_name,
         f"[{signal_name}] done={_check_mark(bool(done[0, 0].item()))}",
         [
-            ("eef → object distance", eef_obj_dist[0].item(), "≤", float(eef_dist_threshold), bool(near_eef[0].item())),
-            ("object → target distance", obj_tgt_dist[0].item(), "≤", float(target_dist_threshold), bool(near_target[0].item())),
+            (
+                "eef → object distance",
+                eef_obj_dist[0].item(),
+                "≤",
+                float(eef_dist_threshold),
+                bool(near_eef[0].item()),
+            ),
+            (
+                "object → target distance",
+                obj_tgt_dist[0].item(),
+                "≤",
+                float(target_dist_threshold),
+                bool(near_target[0].item()),
+            ),
             ("gripper closure", grip[0].item(), "≥", float(gripper_closed_threshold), bool(closed[0].item())),
         ],
     )
@@ -196,10 +185,10 @@ def release_brick_done(
 ) -> torch.Tensor:
     """Fires when the brick is within ``target_dist_threshold`` of ``target_pos``
     AND the fingers' proximal joints are at most ``gripper_open_threshold``."""
-    obj = _object_pos(env, object_name)
-    target = _tensor(target_pos, env.device).expand_as(obj)
+    obj = get_object_pos(env, object_name)
+    target = to_tensor(target_pos, env.device).expand_as(obj)
     obj_tgt_dist = torch.norm(obj - target, dim=-1)
-    grip = _proximal_joint_mean(env, gripper_joint_pattern)
+    grip = get_proximal_joint_mean(env, gripper_joint_pattern)
     near_target = obj_tgt_dist <= target_dist_threshold
     is_open = grip <= gripper_open_threshold
     done = (near_target & is_open).float().unsqueeze(-1)
@@ -208,7 +197,13 @@ def release_brick_done(
         signal_name,
         f"[{signal_name}] done={_check_mark(bool(done[0, 0].item()))}",
         [
-            ("object → target distance", obj_tgt_dist[0].item(), "≤", float(target_dist_threshold), bool(near_target[0].item())),
+            (
+                "object → target distance",
+                obj_tgt_dist[0].item(),
+                "≤",
+                float(target_dist_threshold),
+                bool(near_target[0].item()),
+            ),
             ("gripper openness", grip[0].item(), "≤", float(gripper_open_threshold), bool(is_open[0].item())),
         ],
     )
@@ -224,9 +219,9 @@ def idle_done(
 ) -> torch.Tensor:
     """Fires when the EEF is inside an axis-aligned box of half-extents
     ``threshold`` centred on ``idle_pos``."""
-    eef = _link_pos(env, eef_link)
-    target = _tensor(idle_pos, env.device).expand_as(eef)
-    thr = _tensor(threshold, env.device)
+    eef = get_eef_pos(env, eef_link)
+    target = to_tensor(idle_pos, env.device).expand_as(eef)
+    thr = to_tensor(threshold, env.device)
     delta = (eef - target).abs()
     per_axis_ok = delta <= thr
     in_range = per_axis_ok.all(dim=-1)

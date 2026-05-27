@@ -107,6 +107,9 @@ class SceneObject(BaseModel):
     # Optional per-object physics material. If None, no material override is applied
     # and the object inherits the simulation's default friction/restitution.
     physics_material: Optional[PhysicsMaterialConfig] = None
+    # Optional color/look name under the scene USD's Looks scope. When set, the
+    # generated spawner binds ``{ENV_NS}/Scene/Looks/<visual_material>`` to the object.
+    visual_material: Optional[str] = None
     # Optional reset randomization. When omitted, the object resets to init_state
     # through reset_scene_to_default only.
     reset: Optional[ObjectResetConfig] = None
@@ -146,6 +149,19 @@ class EEFConfig(BaseModel):
     # pink_ik tasks with hand joints (e.g. {"left": "L_", "right": "R_"} for the
     # Inspire hand). Unused for single-EEF tasks.
     hand_joint_prefixes: dict[str, str] = {}
+    # Optional fixed child links inserted into the spawned robot USD and into
+    # the URDF generated for Pink IK. Useful when the controller should track a
+    # task-local frame that does not exist in the source robot asset.
+    virtual_links: dict[str, "VirtualEEFLinkConfig"] = {}
+
+
+class VirtualEEFLinkConfig(BaseModel):
+    link_name: str
+    usd_parent_path: str
+    urdf_frame_name: str
+    urdf_parent_link: str
+    urdf_parent_fallback: Optional[str] = None
+    offset: list[float] = [0.0, 0.0, 0.0]
 
 
 class CameraConfig(BaseModel):
@@ -405,12 +421,14 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "init_rot": _join_floats(obj.init_rot),
             "use_default_sdf_collision": obj.use_default_sdf_collision,
             "physics_material": physics_material,
+            "visual_material": obj.visual_material,
             "reset": _build_object_reset_context(obj, cfg.resets.seed),
         })
 
     has_sdf_objects = any(o.use_default_sdf_collision for o in cfg.scene_objects)
     has_baked_collision_objects = any(not o.use_default_sdf_collision for o in cfg.scene_objects)
     has_physics_materials = any(o.physics_material is not None for o in cfg.scene_objects)
+    has_visual_materials = any(o.visual_material is not None for o in cfg.scene_objects)
     reset_events = _build_reset_events_context(scene_objects)
 
     eef_slices = _build_eef_slices(cfg)
@@ -458,6 +476,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
         "has_sdf_objects": has_sdf_objects,
         "has_baked_collision_objects": has_baked_collision_objects,
         "has_physics_materials": has_physics_materials,
+        "has_visual_materials": has_visual_materials,
         "eef_slices": eef_slices,
         "ik": {
             "controlled_joint_names": cfg.ik_controller.controlled_joint_names,
@@ -476,6 +495,19 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "target_links": cfg.eef.target_links,
             "frame_names": cfg.eef.frame_names,
             "body_name": body_name,
+            "virtual_links": [
+                {
+                    "name": name,
+                    "link_name": link.link_name,
+                    "usd_parent_path": link.usd_parent_path,
+                    "urdf_frame_name": link.urdf_frame_name,
+                    "urdf_parent_link": link.urdf_parent_link,
+                    "urdf_parent_fallback": link.urdf_parent_fallback,
+                    "offset": tuple(link.offset),
+                    "offset_literal": _py_value(link.offset),
+                }
+                for name, link in cfg.eef.virtual_links.items()
+            ],
         },
         "observations": {
             # Mapping of eef_name -> robot link name. Drives EEF obs term generation.
@@ -623,11 +655,11 @@ def _infer_param_type(value: Any) -> Optional[str]:
             return None
         inner_types = {type(v) for v in value}
         if inner_types == {bool}:
-            return "tuple[bool, ...]"
+            return "tuple[" + ", ".join("bool" for _ in value) + "]"
         if inner_types <= {int, float} and inner_types != {bool}:
-            return "tuple[float, ...]"
+            return "tuple[" + ", ".join("float" for _ in value) + "]"
         if inner_types == {str}:
-            return "tuple[str, ...]"
+            return "tuple[" + ", ".join("str" for _ in value) + "]"
         return None
     return None
 
@@ -822,6 +854,10 @@ def _build_subtask_signal_context(cfg: TaskDefinition) -> dict[str, Any]:
             if sig and sig not in seen:
                 seen.add(sig)
                 ordered_signals.append(sig)
+    for sig in cfg.subtask_terms:
+        if sig not in seen:
+            seen.add(sig)
+            ordered_signals.append(sig)
 
     signals_out: list[dict[str, Any]] = []
     func_params: dict[str, dict[str, Optional[str]]] = {}
