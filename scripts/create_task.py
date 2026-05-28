@@ -97,6 +97,7 @@ class SceneObject(BaseModel):
     name: str
     type: str = "RigidObjectCfg"
     prim_path: str
+    spawn: bool = True
     usd_file: Optional[str] = None  # defaults to {name}.usd
     scale: list[float] = [1.0, 1.0, 1.0]
     init_pos: list[float]
@@ -211,6 +212,7 @@ class ResetDefaultsConfig(BaseModel):
     """Global defaults for generated reset EventTerms."""
 
     seed: int = 0
+    sobol_advance_on_success_only: bool = False
 
 
 class SubTaskSpec(BaseModel):
@@ -414,6 +416,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "type": obj.type,
             "prim_path": obj.prim_path,
             "leaf": leaf,
+            "spawn": obj.spawn,
             "usd_file": usd_file,
             "usd_var": f"{obj.name.upper()}_USD_PATH",
             "scale": _join_floats(obj.scale),
@@ -425,11 +428,14 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "reset": _build_object_reset_context(obj, cfg.resets.seed),
         })
 
-    has_sdf_objects = any(o.use_default_sdf_collision for o in cfg.scene_objects)
-    has_baked_collision_objects = any(not o.use_default_sdf_collision for o in cfg.scene_objects)
-    has_physics_materials = any(o.physics_material is not None for o in cfg.scene_objects)
-    has_visual_materials = any(o.visual_material is not None for o in cfg.scene_objects)
-    reset_events = _build_reset_events_context(scene_objects)
+    has_sdf_objects = any(o["spawn"] and o["use_default_sdf_collision"] for o in scene_objects)
+    has_baked_collision_objects = any(o["spawn"] and not o["use_default_sdf_collision"] for o in scene_objects)
+    has_physics_materials = any(o["spawn"] and o["physics_material"] is not None for o in scene_objects)
+    has_visual_materials = any(o["spawn"] and o["visual_material"] is not None for o in scene_objects)
+    reset_events = _build_reset_events_context(
+        scene_objects,
+        cfg.resets.sobol_advance_on_success_only,
+    )
 
     eef_slices = _build_eef_slices(cfg)
     cameras = _build_cameras_context(cfg)
@@ -770,7 +776,10 @@ def _build_object_reset_context(
     }
 
 
-def _build_reset_events_context(scene_objects: list[dict[str, Any]]) -> dict[str, Any]:
+def _build_reset_events_context(
+    scene_objects: list[dict[str, Any]],
+    sobol_advance_on_success_only: bool = False,
+) -> dict[str, Any]:
     """Group object reset EventTerms by sampler.
 
     Sobol resets are emitted as one joint EventTerm so the Sobol engine covers
@@ -806,6 +815,7 @@ def _build_reset_events_context(scene_objects: list[dict[str, Any]]) -> dict[str
         "uniform": uniform_objects,
         "sobol": sobol_objects,
         "sobol_seed": sobol_seed,
+        "sobol_advance_on_success_only": sobol_advance_on_success_only,
     }
 
 
@@ -1205,6 +1215,8 @@ def generate_extension_project(
     print(f"\n  Place your USD files:")
     print(f"     Scene:   {assets_dir}/scenes/{scene_file}")
     for obj in cfg.scene_objects:
+        if not obj.spawn:
+            continue
         usd_file = obj.usd_file or f"{obj.name}.usd"
         print(f"     Object:  {assets_dir}/objects/{usd_file}")
 

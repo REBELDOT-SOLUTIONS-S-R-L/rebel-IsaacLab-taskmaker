@@ -54,12 +54,23 @@ scene:
   init_rot: [1.0, 0.0, 0.0, 0.0]
 
 
+# ─── RESETS ─────────────────────────────────────────────────
+# seed:                          Global default for object reset seeds.
+# sobol_advance_on_success_only: When true, Sobol object layouts advance only
+#                                after a successful recorded episode.
+resets:
+  seed: 0
+  sobol_advance_on_success_only: true
+
+
 # ─── SCENE OBJECTS (optional) ────────────────────────────────
 # Rigid bodies that the robot interacts with. Each object needs:
 #   name:                       Unique identifier (becomes a Python attribute)
 #   type:                       "RigidObjectCfg" for physics-tracked / resettable objects,
 #                               "AssetBaseCfg" for static decoration.
 #   prim_path:                  USD path in the scene ({ENV_REGEX_NS} = per-env prefix)
+#   spawn:                      Optional. Set false when prim_path points to a prim already
+#                               present in the scene USD. Defaults to true.
 #   usd_file:                   Filename in assets/objects/
 #   scale:                      Scale factor [x, y, z]
 #   init_pos:                   Initial position [x, y, z] in meters
@@ -97,6 +108,8 @@ scene_objects:
       pos_range:
         x: [-0.03, 0.03]
         y: [-0.03, 0.03]
+      rot_range:
+        rz: [-0.5, 0.5]
     use_default_sdf_collision: true
     physics_material:
       static_friction: 1.2
@@ -116,12 +129,28 @@ scene_objects:
       pos_range:
         x: [-0.03, 0.03]
         y: [-0.03, 0.03]
+      rot_range:
+        rz: [-0.5, 0.5]
     use_default_sdf_collision: true
     physics_material:
       static_friction: 1.2
       dynamic_friction: 1.0
       restitution: 0.0
     visual_material: red
+  - name: plate
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/plate_4x2_centered_2"
+    spawn: false
+    init_pos: [-0.7, 0.0, 0.813]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+    reset:
+      sampler: sobol
+      seed: 0
+      pos_range:
+        x: [-0.02, 0.02]
+        y: [-0.02, 0.02]
+      rot_range:
+        rz: [-0.5, 0.5]
 
 
 # ─── IK CONTROLLER ───────────────────────────────────────────

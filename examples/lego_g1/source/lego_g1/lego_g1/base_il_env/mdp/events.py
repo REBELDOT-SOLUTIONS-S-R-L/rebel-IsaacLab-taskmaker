@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
@@ -126,12 +127,73 @@ def _sobol_state_key(
     )
 
 
+def _env_id_list(env_ids: torch.Tensor) -> list[int]:
+    return [int(env_id) for env_id in env_ids.detach().cpu().flatten().tolist()]
+
+
+def _counter_value(value) -> int:
+    if isinstance(value, torch.Tensor):
+        return int(value.detach().cpu().item())
+    return int(value)
+
+
+def _explicit_sobol_success_mask(env: "ManagerBasedEnv", env_ids: torch.Tensor) -> torch.Tensor | None:
+    succeeded = getattr(env, "_sobol_episode_succeeded", None)
+    if succeeded is None:
+        return None
+
+    if not isinstance(succeeded, torch.Tensor):
+        succeeded = torch.as_tensor(succeeded, dtype=torch.bool)
+        index_ids = torch.as_tensor(_env_id_list(env_ids), dtype=torch.long)
+        return succeeded[index_ids].detach().to(device="cpu", dtype=torch.bool).flatten()
+
+    index_ids = env_ids.detach().to(device=succeeded.device, dtype=torch.long)
+    mask = succeeded[index_ids].detach().to(device="cpu", dtype=torch.bool).flatten()
+    try:
+        succeeded[index_ids] = False
+    except RuntimeError:
+        pass
+    return mask
+
+
+def _sobol_success_mask(
+    env: "ManagerBasedEnv",
+    env_ids: torch.Tensor,
+    entry: dict,
+) -> torch.Tensor:
+    explicit_mask = _explicit_sobol_success_mask(env, env_ids)
+    if explicit_mask is not None:
+        return explicit_mask
+
+    recorder_manager = getattr(env, "recorder_manager", None)
+    exported_count = getattr(recorder_manager, "exported_successful_episode_count", None)
+    if exported_count is None:
+        if not getattr(env, "_sobol_no_recorder_warning_emitted", False):
+            warnings.warn(
+                "reset_root_state_sobol(advance_on_success_only=True) could not "
+                "find env._sobol_episode_succeeded or "
+                "env.recorder_manager.exported_successful_episode_count; "
+                "advancing Sobol samples on every reset.",
+                stacklevel=2,
+            )
+            setattr(env, "_sobol_no_recorder_warning_emitted", True)
+        return torch.ones(len(env_ids), dtype=torch.bool)
+
+    current_count = _counter_value(exported_count)
+    previous_count = entry.get("last_exported_successful_episode_count")
+    entry["last_exported_successful_episode_count"] = current_count
+    if previous_count is None:
+        return torch.zeros(len(env_ids), dtype=torch.bool)
+    return torch.full((len(env_ids),), current_count > previous_count, dtype=torch.bool)
+
+
 def _draw_sobol_samples(
     env: "ManagerBasedEnv",
     env_ids: torch.Tensor,
     seed: int,
     asset_items: list[tuple[str, SceneEntityCfg]],
     pose_by_asset: dict[str, dict[str, tuple[float, float]]],
+    advance_on_success_only: bool = False,
 ) -> tuple[torch.Tensor | None, dict[str, slice]]:
     slices: dict[str, slice] = {}
     cursor = 0
@@ -157,8 +219,34 @@ def _draw_sobol_samples(
         }
         state[key] = entry
 
-    samples = entry["engine"].draw(len(env_ids))
-    entry["count"] += len(env_ids)
+    if not advance_on_success_only:
+        samples = entry["engine"].draw(len(env_ids))
+        entry["count"] += len(env_ids)
+        setattr(env, "_sobol_count", entry["count"])
+        return samples, slices
+
+    env_ids_list = _env_id_list(env_ids)
+    cache: dict[int, torch.Tensor] = entry.setdefault("cache", {})
+    success_mask = _sobol_success_mask(env, env_ids, entry)
+    refresh_rows = [
+        row
+        for row, env_id in enumerate(env_ids_list)
+        if bool(success_mask[row]) or env_id not in cache
+    ]
+
+    samples = torch.empty((len(env_ids_list), cursor), dtype=torch.float32)
+    refreshed_rows = set(refresh_rows)
+    if refresh_rows:
+        fresh_samples = entry["engine"].draw(len(refresh_rows))
+        entry["count"] += len(refresh_rows)
+        for row, sample in zip(refresh_rows, fresh_samples):
+            cache[env_ids_list[row]] = sample.clone()
+            samples[row] = sample
+
+    for row, env_id in enumerate(env_ids_list):
+        if row not in refreshed_rows:
+            samples[row] = cache[env_id]
+
     setattr(env, "_sobol_count", entry["count"])
     return samples, slices
 
@@ -237,13 +325,20 @@ def reset_root_state_sobol(
     velocity_ranges: dict[str, dict[str, tuple[float, float]]] | None = None,
     asset_cfgs: dict[str, SceneEntityCfg] | Sequence[SceneEntityCfg] | None = None,
     seed: int = 0,
-):
+    advance_on_success_only: bool = False,
+) -> None:
     """Reset root poses from a scrambled, seeded Sobol sequence.
 
     The single-asset call shape mirrors Isaac Lab's ``reset_root_state_uniform``.
     For joint object coverage, pass ``asset_cfgs`` plus per-asset
     ``pose_ranges``/``velocity_ranges``. One Sobol engine is built over the
     concatenated pose dimensions, then each asset receives its slice.
+
+    If ``advance_on_success_only`` is true, each env reuses its cached Sobol
+    sample until that env succeeds. Set ``env._sobol_episode_succeeded`` to a
+    per-env bool tensor for exact vectorized gating. Without that tensor, the
+    recorder manager's global successful-export counter is used as a single-env
+    fallback; if no recorder is present, samples advance on every reset.
     """
     asset_items, pose_by_asset, velocity_by_asset = _normalize_sobol_inputs(
         pose_range,
@@ -253,7 +348,14 @@ def reset_root_state_sobol(
         velocity_ranges,
         asset_cfgs,
     )
-    unit_samples, sample_slices = _draw_sobol_samples(env, env_ids, seed, asset_items, pose_by_asset)
+    unit_samples, sample_slices = _draw_sobol_samples(
+        env,
+        env_ids,
+        seed,
+        asset_items,
+        pose_by_asset,
+        advance_on_success_only,
+    )
 
     for name, cfg in asset_items:
         asset: RigidObject | Articulation = env.scene[cfg.name]

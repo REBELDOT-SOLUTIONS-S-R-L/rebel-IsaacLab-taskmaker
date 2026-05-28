@@ -359,6 +359,13 @@ class LegoG1SceneCfg(InteractiveSceneCfg):
         init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, 0.2, 0.82), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
+    plate: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Scene/plate_4x2_centered_2",
+        spawn=None,
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(-0.7, 0.0, 0.813), rot=(1.0, 0.0, 0.0, 0.0)),
+    )
+
+
 # =====================================================================
 # 2) ACTIONS
 # =====================================================================
@@ -601,16 +608,20 @@ class LegoG1EventCfg:
             "asset_cfgs": {
                 "blue_brick": SceneEntityCfg("blue_brick"),
                 "red_brick": SceneEntityCfg("red_brick"),
+                "plate": SceneEntityCfg("plate"),
             },
             "pose_ranges": {
-                "blue_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03)},
-                "red_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03)},
+                "blue_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+                "red_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+                "plate": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "yaw": (-0.5, 0.5)},
             },
             "velocity_ranges": {
                 "blue_brick": {},
                 "red_brick": {},
+                "plate": {},
             },
             "seed": 0,
+            "advance_on_success_only": True,
         },
     )
 

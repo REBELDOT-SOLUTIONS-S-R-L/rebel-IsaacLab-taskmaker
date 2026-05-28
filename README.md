@@ -208,6 +208,7 @@ scene_objects:
   - name: object_1                                # Python attribute / scene key
     type: RigidObjectCfg                          # or "AssetBaseCfg" for static deco
     prim_path: "{ENV_REGEX_NS}/object_1"          # per-env USD path
+    spawn: true                                   # false tracks an existing scene prim
     usd_file: parts/object.usd                    # filename in assets/objects/
     scale: [1.0, 1.0, 1.0]
     init_pos: [0.0, -0.15, 0.85]
@@ -231,10 +232,13 @@ scene_objects:
   this is what `env.scene["<name>"]` returns.
 - **`type`** — `RigidObjectCfg` for physics-tracked / resettable bodies,
   `AssetBaseCfg` for static decoration.
-- **`prim_path`** — USD path for the spawned object. `{ENV_REGEX_NS}` is
-  substituted with the per-env prefix.
+- **`prim_path`** — USD path for the object. `{ENV_REGEX_NS}` is substituted
+  with the per-env prefix.
+- **`spawn`** — optional, default `true`. Set `false` when `prim_path` points
+  to a rigid prim that already exists in the scene USD; the generated
+  `RigidObjectCfg` uses `spawn=None` and no object USD file is required.
 - **`usd_file`** — file under `assets/objects/`; subdirectories are allowed.
-  Defaults to `<name>.usd` if omitted.
+  Defaults to `<name>.usd` if omitted. Ignored when `spawn: false`.
 - **`scale` / `init_pos` / `init_rot`** — per-object transform.
 - **`use_default_sdf_collision`** — when `true` (default), the spawner replaces
   baked-in collision approximations with an SDF mesh. Set `false` to keep
@@ -255,6 +259,7 @@ If `reset` is omitted, the object resets to its configured `init_pos` /
 ```yaml
 resets:
   seed: 0                                        # global default for Sobol objects
+  sobol_advance_on_success_only: false           # optional; default preserves old behavior
 
 scene_objects:
   - name: blue_brick
@@ -279,6 +284,12 @@ scene_objects:
 - **`seed`** — deterministic Sobol scramble seed for this object. All Sobol
   objects in one task must share the same seed because they share one joint
   Sobol engine. If omitted, `resets.seed` is used.
+- **`resets.sobol_advance_on_success_only`** — optional grouped-Sobol behavior.
+  When `true`, the generated `reset_sobol_objects` term reuses each env's
+  cached Sobol layout after failed episodes and advances only after success.
+  Exact multi-env gating requires `env._sobol_episode_succeeded`; otherwise
+  the recorder manager's successful-export counter is used as a single-env
+  recording fallback.
 - **`pos_range`** — optional offsets for `x`, `y`, `z`.
 - **`rot_range`** — optional offsets for `rx`, `ry`, `rz` or
   `roll`, `pitch`, `yaw`.

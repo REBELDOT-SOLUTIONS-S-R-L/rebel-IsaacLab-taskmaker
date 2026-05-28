@@ -127,6 +127,7 @@ scene:                          # defaults to scene.usd at identity transform
   init_rot: [1.0, 0.0, 0.0, 0.0]
 
 scene_objects: []               # list of RigidObjectCfg entries
+                                # set spawn: false to track a prim already in scene.usd
                                 # optional per-object reset:
                                 #   reset:
                                 #     sampler: uniform | sobol  # default uniform
@@ -136,6 +137,8 @@ scene_objects: []               # list of RigidObjectCfg entries
 
 resets:
   seed: 0                       # global default for reset.seed
+  sobol_advance_on_success_only: false
+                                # optional; Sobol layouts advance only after success
 
 observations:
   eef_link_names:               # links to observe (usually same as target_links)

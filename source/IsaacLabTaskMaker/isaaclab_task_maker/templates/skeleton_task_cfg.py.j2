@@ -88,7 +88,9 @@ from isaaclab.envs.mdp.actions.actions_cfg import JointPositionActionCfg
 # =====================================================================
 SCENE_USD_PATH = os.path.join(SCENES_DIR, "{{ scene.usd_file }}")
 {% for obj in scene_objects %}
+{% if obj.spawn %}
 {{ obj.usd_var }} = os.path.join(OBJECTS_DIR, "{{ obj.usd_file }}")
+{% endif %}
 {% endfor %}
 
 {% if scene_objects %}
@@ -98,7 +100,7 @@ SCENE_USD_PATH = os.path.join(SCENES_DIR, "{{ scene.usd_file }}")
 # prims under the spawned root.
 _PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
 {% for obj in scene_objects %}
-{% if obj.physics_material %}
+{% if obj.spawn and obj.physics_material %}
     "{{ obj.leaf }}": sim_utils.RigidBodyMaterialCfg(
         static_friction={{ obj.physics_material.static_friction }},
         dynamic_friction={{ obj.physics_material.dynamic_friction }},
@@ -114,7 +116,7 @@ _PHYSICS_MATERIALS: dict[str, sim_utils.RigidBodyMaterialCfg] = {
 # resolved under each env's Scene/Looks scope.
 _VISUAL_MATERIAL_COLORS: dict[str, str] = {
 {% for obj in scene_objects %}
-{% if obj.visual_material %}
+{% if obj.spawn and obj.visual_material %}
     "{{ obj.leaf }}": "{{ obj.visual_material }}",
 {% endif %}
 {% endfor %}
@@ -389,6 +391,7 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
 
     {{ obj.name }}: {{ obj.type }} = {{ obj.type }}(
         prim_path="{{ obj.prim_path }}",
+{% if obj.spawn %}
         spawn=UsdFileCfg(
 {% if obj.type in ["RigidObjectCfg", "AssetBaseCfg"] %}
 {% if obj.use_default_sdf_collision %}
@@ -405,6 +408,9 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
             collision_props=sim_utils.CollisionPropertiesCfg(),
 {% endif %}
         ),
+{% else %}
+        spawn=None,
+{% endif %}
         init_state={{ obj.type }}.InitialStateCfg(pos=({{ obj.init_pos }}), rot=({{ obj.init_rot }})),
     )
 {% endfor %}
@@ -751,6 +757,7 @@ class {{ class_prefix }}EventCfg:
 {% endfor %}
             },
             "seed": {{ reset_events.sobol_seed }},
+            "advance_on_success_only": {{ reset_events.sobol_advance_on_success_only }},
         },
     )
 {% endif %}
