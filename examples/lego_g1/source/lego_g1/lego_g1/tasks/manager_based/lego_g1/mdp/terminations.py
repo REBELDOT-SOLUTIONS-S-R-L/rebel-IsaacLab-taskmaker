@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from lego_g1.base_il_env.mdp.observations import get_object_pos, get_proximal_joint_mean, to_tensor
+from lego_g1.base_il_env.mdp.observations import get_object_pos, to_tensor
+
+from .observations import get_proximal_joint_mean
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv

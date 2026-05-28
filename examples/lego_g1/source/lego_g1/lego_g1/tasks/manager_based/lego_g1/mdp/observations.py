@@ -29,12 +29,34 @@ import torch
 from lego_g1.base_il_env.mdp.observations import (
     get_eef_pos,
     get_object_pos,
-    get_proximal_joint_mean,
     to_tensor,
 )
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
+
+
+def get_proximal_joint_mean(env: "ManagerBasedRLEnv", joint_pattern: str) -> torch.Tensor:
+    """Mean joint position over the Inspire-hand proximal joints matching ``joint_pattern``.
+
+    Used by the subtask predicates below and by ``mdp/terminations.py`` to decide
+    whether a hand is "closed" (mean ≥ threshold) or "open" (mean ≤ threshold).
+    Task-specific because it assumes the G1 robot's Inspire FTP hand naming
+    scheme; other tasks (no hands, different hand topology) define their own.
+
+    Args:
+        env: The environment instance.
+        joint_pattern: Joint name pattern forwarded to ``find_joints``.
+
+    Returns:
+        Mean joint position tensor of shape (num_envs,).
+    """
+    robot = env.scene["unitree_g1"]
+    indexes, _ = robot.find_joints(joint_pattern)
+    if not indexes:
+        return torch.zeros(env.num_envs, device=env.device)
+    indexes = torch.tensor(indexes, dtype=torch.long, device=env.device)
+    return robot.data.joint_pos[:, indexes].mean(dim=1)
 
 
 # ---------------------------------------------------------------------------
