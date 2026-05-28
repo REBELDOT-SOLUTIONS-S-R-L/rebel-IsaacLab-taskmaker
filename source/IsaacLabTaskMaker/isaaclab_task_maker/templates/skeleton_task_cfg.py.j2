@@ -656,43 +656,7 @@ class {{ class_prefix }}ObservationsCfg:
             self.enable_corruption = False
             self.concatenate_terms = False
 
-{% if subtask_terms.signals %}
-    @configclass
-    class SubtaskTermsCfg(ObsGroup):
-        """Subtask termination signals consumed by the annotated-teleop recorder.
-
-        Each term returns a ``(num_envs, 1)`` binary float tensor that is ``1.0``
-        when the corresponding subtask is complete. ``BaseILEnv.get_subtask_term_predicates``
-        reads this group out of ``obs_buf["subtask_terms"]`` and feeds it to the
-        recorder's dwell-and-latch logic. The attribute names below must match
-        the ``subtask_term_signal`` values declared in
-        ``{{ task_name }}_mimic_cfg.py``.
-        """
-
-{% for sig in subtask_terms.signals %}
-{% if sig.params | length > 1 %}
-        {{ sig.name }} = ObsTerm(
-            func=mdp.{{ sig.func }},
-            params={
-{% for k, v in sig.params %}
-                "{{ k }}": {{ v }},
-{% endfor %}
-            },
-        )
-{% else %}
-        {{ sig.name }} = ObsTerm(func=mdp.{{ sig.func }}, params={"signal_name": "{{ sig.name }}"})
-{% endif %}
-{% endfor %}
-
-        def __post_init__(self):
-            self.enable_corruption = False
-            self.concatenate_terms = False
-
-{% endif %}
     policy: PolicyCfg = PolicyCfg()
-{% if subtask_terms.signals %}
-    subtask_terms: SubtaskTermsCfg = SubtaskTermsCfg()
-{% endif %}
 
 
 # =====================================================================
@@ -766,19 +730,6 @@ class {{ class_prefix }}EventCfg:
 @configclass
 class {{ class_prefix }}TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-{% for term in terminations.terms %}
-    {{ term.name }} = DoneTerm(
-        func=mdp.{{ term.func }},
-{% if term.params %}
-        params={
-{% for k, v in term.params %}
-            "{{ k }}": {{ v }},
-{% endfor %}
-        },
-{% endif %}
-        time_out={{ term.time_out }},
-    )
-{% endfor %}
 
 
 # =====================================================================

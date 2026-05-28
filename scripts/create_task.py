@@ -30,7 +30,7 @@ from typing import Any, Literal, Optional
 
 import yaml
 from jinja2 import Environment, FileSystemLoader
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -215,64 +215,6 @@ class ResetDefaultsConfig(BaseModel):
     sobol_advance_on_success_only: bool = False
 
 
-class SubTaskSpec(BaseModel):
-    """A single SubTaskConfig entry. Extra keys are forwarded to SubTaskConfig as-is."""
-
-    model_config = ConfigDict(extra="allow")
-
-    object_ref: Optional[str] = None
-    subtask_term_signal: Optional[str] = None
-
-
-class SubtaskTermSpec(BaseModel):
-    """Declarative binding for a subtask_term_signal predicate.
-
-    Lets multiple signals share one MDP function differentiated by params (so
-    a single ``grasp_brick_done`` can back both ``grasp_brick_left`` and
-    ``grasp_brick_right`` ObsTerms). If ``func`` is omitted it defaults to the
-    signal name, preserving the one-function-per-signal stub layout.
-    """
-
-    func: Optional[str] = None
-    params: dict[str, Any] = {}
-
-
-class TerminationSpec(BaseModel):
-    """Declarative binding for a ``DoneTerm`` entry on ``TerminationsCfg``.
-
-    The YAML key becomes the cfg attribute name; ``func`` resolves to a
-    function in the generated ``mdp/terminations.py``. As with
-    ``subtask_terms``, several terminations can share one underlying function
-    differentiated by params — the generator emits one stub per unique func
-    with the union of parameter names and inferred types.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    func: str
-    params: dict[str, Any] = {}
-    time_out: bool = False
-
-
-class MimicConfig(BaseModel):
-    """Optional Mimic data-generation configuration.
-
-    When present, create_task.py generates a `<task_name>_mimic_cfg.py` alongside
-    the task cfg and registers a sibling `<task_id>-Mimic` gym env.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    # When None, the mimic task_id defaults to `<task_id>-Mimic` in the context builder.
-    mimic_task_id: Optional[str] = None
-    # Free-form passthrough into self.datagen_config.<k> = <v>. Only keys present
-    # in this dict are emitted, so users can stay close to upstream IsaacLab examples
-    # without us hard-coding the full DataGenConfig schema.
-    datagen: dict[str, Any] = {}
-    # eef_name -> ordered list of SubTaskConfig entries.
-    subtasks: dict[str, list[SubTaskSpec]] = {}
-
-
 class TaskDefinition(BaseModel):
     task_name: str
     task_id: str
@@ -286,18 +228,6 @@ class TaskDefinition(BaseModel):
     sim: SimConfig = SimConfig()
     observations: dict = {}
     resets: ResetDefaultsConfig = ResetDefaultsConfig()
-    mimic: Optional[MimicConfig] = None
-    # Optional binding from subtask_term_signal name to a (function, params)
-    # pair. Used to flesh out the SubtaskTermsCfg ObsTerms and the MDP stub
-    # signatures. When omitted, each declared signal gets its own zero-stub
-    # function and an ObsTerm with only the signal_name param.
-    subtask_terms: dict[str, SubtaskTermSpec] = {}
-    # Optional DoneTerm entries on TerminationsCfg, keyed by the cfg attribute
-    # name (e.g. ``success``). Each entry binds an MDP function + params; the
-    # generator emits a typed stub in mdp/terminations.py and wires a DoneTerm
-    # on TerminationsCfg. ``time_out`` defaults to False; ``time_out`` and
-    # ``reset_all`` are reserved attribute names and cannot be reused here.
-    terminations: dict[str, TerminationSpec] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -319,8 +249,7 @@ def _pyrepr(value: Any) -> str:
     """Jinja2 filter: format an arbitrary YAML-derived value as a Python literal.
 
     Lists become Python lists, tuples stay tuples, dicts become dict literals,
-    None becomes ``None``, bools become ``True``/``False``. Used to forward
-    Mimic config values verbatim into the generated Python.
+    None becomes ``None``, bools become ``True``/``False``.
     """
     return repr(value)
 
@@ -439,8 +368,6 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
 
     eef_slices = _build_eef_slices(cfg)
     cameras = _build_cameras_context(cfg)
-    subtask_terms = _build_subtask_signal_context(cfg)
-    terminations = _build_terminations_context(cfg)
 
     title = f"IL Task: {class_prefix}"
     description = f"Imitation-learning task extension for {class_prefix} ({cfg.task_id})"
@@ -527,9 +454,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "xr_anchor_pos": _join_floats(cfg.teleop.xr_anchor_pos),
             "xr_anchor_rot": _join_floats(cfg.teleop.xr_anchor_rot),
         },
-        "subtask_terms": subtask_terms,
-        "terminations": terminations,
-        "mimic": _build_mimic_context(cfg, class_prefix),
+        "mimic_task_id": f"{cfg.task_id}-Mimic",
     }
 
 
@@ -642,39 +567,12 @@ def _build_cameras_context(cfg: TaskDefinition) -> list[dict]:
     return out
 
 
-def _infer_param_type(value: Any) -> Optional[str]:
-    """Best-effort Python type annotation for a YAML-derived value.
-
-    Returns ``None`` when no useful annotation can be inferred — the generator
-    then emits the parameter without a type hint, which the user can refine.
-    """
-    if isinstance(value, bool):
-        return "bool"
-    if isinstance(value, int):
-        return "int"
-    if isinstance(value, float):
-        return "float"
-    if isinstance(value, str):
-        return "str"
-    if isinstance(value, (list, tuple)):
-        if not value:
-            return None
-        inner_types = {type(v) for v in value}
-        if inner_types == {bool}:
-            return "tuple[" + ", ".join("bool" for _ in value) + "]"
-        if inner_types <= {int, float} and inner_types != {bool}:
-            return "tuple[" + ", ".join("float" for _ in value) + "]"
-        if inner_types == {str}:
-            return "tuple[" + ", ".join("str" for _ in value) + "]"
-        return None
-    return None
-
-
 def _py_value(value: Any) -> str:
     """Render a YAML-derived value as a Python literal.
 
-    Numeric lists are upgraded to tuples so they line up with the
-    ``tuple[float, ...]`` annotation produced by ``_infer_param_type``.
+    Numeric lists are upgraded to tuples so the rendered literals slot into
+    ``tuple[float, ...]`` typed slots (e.g. reset pose ranges) without
+    extra coercion in the generated code.
     """
     if isinstance(value, list) and value:
         inner_types = {type(v) for v in value}
@@ -816,211 +714,6 @@ def _build_reset_events_context(
         "sobol": sobol_objects,
         "sobol_seed": sobol_seed,
         "sobol_advance_on_success_only": sobol_advance_on_success_only,
-    }
-
-
-def _build_subtask_signal_context(cfg: TaskDefinition) -> dict[str, Any]:
-    """Build the subtask-signal context block for the templates.
-
-    Output shape::
-
-        {
-            "signals": [
-                {
-                    "name": "grasp_brick_left",
-                    "func": "grasp_brick_done",
-                    "params": [("eef_link", "'left_wrist_yaw_link'"), ...],
-                },
-                ...
-            ],
-            "funcs": [
-                {
-                    "name": "grasp_brick_done",
-                    "params": [{"name": "eef_link", "type": "str"}, ...],
-                },
-                ...
-            ],
-        }
-
-    ``signals`` is the unique ordered list of ``subtask_term_signal`` values
-    declared on ``mimic.subtasks`` (terminal ``None`` entries are skipped).
-    For each signal, ``params`` are pre-rendered ``(key, py_literal)`` pairs
-    that include ``signal_name`` plus any user-supplied entries from
-    ``subtask_terms``.
-
-    ``funcs`` is the unique set of underlying MDP function names; each carries
-    the merged set of parameter names with inferred types so the stub
-    generator can emit a single function whose signature accepts every param
-    used by any signal pointing at it.
-    """
-    if cfg.mimic is None:
-        return {"signals": [], "funcs": []}
-
-    ordered_signals: list[str] = []
-    seen: set[str] = set()
-    for entries in cfg.mimic.subtasks.values():
-        for entry in entries:
-            sig = entry.subtask_term_signal
-            if sig and sig not in seen:
-                seen.add(sig)
-                ordered_signals.append(sig)
-    for sig in cfg.subtask_terms:
-        if sig not in seen:
-            seen.add(sig)
-            ordered_signals.append(sig)
-
-    signals_out: list[dict[str, Any]] = []
-    func_params: dict[str, dict[str, Optional[str]]] = {}
-    func_order: list[str] = []
-
-    for sig in ordered_signals:
-        binding = cfg.subtask_terms.get(sig)
-        func_name = (binding.func if binding and binding.func else sig)
-        user_params = (binding.params if binding else {}) or {}
-
-        signal_params: list[tuple[str, str]] = [("signal_name", repr(sig))]
-        for k, v in user_params.items():
-            signal_params.append((k, _py_value(v)))
-        signals_out.append({
-            "name": sig,
-            "func": func_name,
-            "params": signal_params,
-        })
-
-        if func_name not in func_params:
-            func_params[func_name] = {}
-            func_order.append(func_name)
-        merged = func_params[func_name]
-        for k, v in user_params.items():
-            inferred = _infer_param_type(v)
-            existing = merged.get(k)
-            # First declaration wins; later signals only fill in a type that
-            # was previously unknown.
-            if k not in merged:
-                merged[k] = inferred
-            elif existing is None and inferred is not None:
-                merged[k] = inferred
-
-    funcs_out: list[dict[str, Any]] = []
-    for fn in func_order:
-        params_def: list[dict[str, Optional[str]]] = [
-            {"name": name, "type": ty} for name, ty in func_params[fn].items()
-        ]
-        funcs_out.append({"name": fn, "params": params_def})
-
-    return {"signals": signals_out, "funcs": funcs_out}
-
-
-# Attribute names reserved by the generated TerminationsCfg / EventCfg blocks.
-# YAML entries that collide with these would silently shadow the built-ins.
-_RESERVED_TERMINATION_NAMES = {"time_out"}
-
-
-def _build_terminations_context(cfg: TaskDefinition) -> dict[str, Any]:
-    """Build the terminations context block for the templates.
-
-    Output shape mirrors ``_build_subtask_signal_context``::
-
-        {
-            "terms":  [{"name": "success", "func": "...", "time_out": False,
-                        "params": [(key, py_literal), ...]}],
-            "funcs":  [{"name": "bricks_released_at_targets",
-                        "params": [{"name": "...", "type": "..."}, ...]}],
-        }
-
-    ``terms`` is the per-DoneTerm list rendered onto ``TerminationsCfg``.
-    ``funcs`` is the deduplicated set of underlying MDP functions; each carries
-    the merged set of parameter names with inferred types so a single stub
-    can back multiple terms (same trick as subtask_terms).
-    """
-    if not cfg.terminations:
-        return {"terms": [], "funcs": []}
-
-    terms_out: list[dict[str, Any]] = []
-    func_params: dict[str, dict[str, Optional[str]]] = {}
-    func_order: list[str] = []
-
-    for name, spec in cfg.terminations.items():
-        if name in _RESERVED_TERMINATION_NAMES:
-            raise ValueError(
-                f"terminations.{name} clashes with a built-in DoneTerm; "
-                f"pick a different attribute name."
-            )
-
-        rendered_params: list[tuple[str, str]] = [
-            (k, _py_value(v)) for k, v in spec.params.items()
-        ]
-        terms_out.append({
-            "name": name,
-            "func": spec.func,
-            "time_out": spec.time_out,
-            "params": rendered_params,
-        })
-
-        if spec.func not in func_params:
-            func_params[spec.func] = {}
-            func_order.append(spec.func)
-        merged = func_params[spec.func]
-        for k, v in spec.params.items():
-            inferred = _infer_param_type(v)
-            if k not in merged:
-                merged[k] = inferred
-            elif merged[k] is None and inferred is not None:
-                merged[k] = inferred
-
-    funcs_out: list[dict[str, Any]] = []
-    for fn in func_order:
-        params_def: list[dict[str, Optional[str]]] = [
-            {"name": name, "type": ty} for name, ty in func_params[fn].items()
-        ]
-        funcs_out.append({"name": fn, "params": params_def})
-
-    return {"terms": terms_out, "funcs": funcs_out}
-
-
-# SubTaskConfig fields that are declared as tuples upstream. YAML reads them as
-# lists, so coerce them so the generated Python keeps the tuple syntax that
-# matches the upstream IsaacLab examples.
-_TUPLE_SUBTASK_FIELDS = (
-    "first_subtask_start_offset_range",
-    "subtask_start_offset_range",
-    "subtask_term_offset_range",
-)
-
-
-def _build_mimic_context(cfg: TaskDefinition, class_prefix: str) -> Optional[dict]:
-    """Build the Mimic section of the Jinja context, or return None if no mimic config."""
-    if cfg.mimic is None:
-        return None
-
-    mimic_task_id = cfg.mimic.mimic_task_id or f"{cfg.task_id}-Mimic"
-
-    # Render datagen kv pairs as (key, python-literal) so the template can emit
-    # `self.datagen_config.<k> = <v>` without needing per-field knowledge.
-    datagen_items = [(k, repr(v)) for k, v in cfg.mimic.datagen.items()]
-
-    subtasks: dict[str, list[list[tuple[str, str]]]] = {}
-    for eef_name, entries in cfg.mimic.subtasks.items():
-        rendered_entries: list[list[tuple[str, str]]] = []
-        for entry in entries:
-            raw = entry.model_dump()
-            # Drop unset Nones so the generated code only mentions fields the
-            # user actually specified.
-            kv: list[tuple[str, str]] = []
-            for k, v in raw.items():
-                if v is None and k not in ("object_ref", "subtask_term_signal"):
-                    continue
-                if k in _TUPLE_SUBTASK_FIELDS and isinstance(v, list):
-                    v = tuple(v)
-                kv.append((k, repr(v)))
-            rendered_entries.append(kv)
-        subtasks[eef_name] = rendered_entries
-
-    return {
-        "mimic_task_id": mimic_task_id,
-        "class_prefix": class_prefix,
-        "datagen_items": datagen_items,
-        "subtasks": subtasks,
     }
 
 
@@ -1176,12 +869,11 @@ def generate_extension_project(
         jinja_env.get_template("skeleton_task_cfg.py.j2").render(context),
         dry_run,
     )
-    if context["mimic"] is not None:
-        _write(
-            task_dir / f"{task_name}_mimic_cfg.py",
-            jinja_env.get_template("mimic_env_cfg.py.j2").render(context),
-            dry_run,
-        )
+    _write(
+        task_dir / f"{task_name}_mimic_cfg.py",
+        jinja_env.get_template("mimic_env_cfg.py.j2").render(context),
+        dry_run,
+    )
     _write(
         mdp_dir / "__init__.py",
         jinja_env.get_template("mdp_init.py.j2").render(context),
@@ -1229,7 +921,8 @@ def generate_extension_project(
     print(f"     so IsaacLab's stock scripts can find the registered gym envs.)")
     print(f"  5. Run, e.g.:")
     print(f"     ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py --task {task_id}")
-    print(f"     ./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {task_id}-Mimic")
+    print(f"     ./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {context['mimic_task_id']}")
+    print(f"  6. Fill in task-specific subtask_configs in: {task_dir / f'{task_name}_mimic_cfg.py'}")
 
 
 # ---------------------------------------------------------------------------

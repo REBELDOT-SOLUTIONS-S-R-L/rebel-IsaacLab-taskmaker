@@ -56,8 +56,8 @@ task_id: IL-LEGO-G1-v0            # Gymnasium env ID (used by --task <id>)
 
 - **`task_name`** — folder name under `tasks/manager_based/` and the prefix of
   the generated cfg class (`lego_g1` → `LegoG1TaskCfg`).
-- **`task_id`** — gym registration ID; when `mimic:` is present, a sibling
-  `<task_id>-Mimic` env is registered too.
+- **`task_id`** — gym registration ID; a sibling `<task_id>-Mimic` env is
+  registered automatically alongside it.
 
 ### `robot` (required)
 
@@ -277,109 +277,32 @@ sim:
 All fields are optional. Defaults are sensible for IL workflows; tighten `dt`
 or lower `decimation` if the policy needs higher control bandwidth.
 
-### `subtask_terms` (optional)
+### Mimic data-generation pipeline
 
-Declarative binding from a `subtask_term_signal` name to the MDP predicate
-function plus parameters that compute it. The generator stubs each function
-in `mdp/observations.py` with an inferred type signature; you fill in the
-body.
+`create_task.py` always emits `<task_name>_mimic_cfg.py` and registers a
+sibling `<task_id>-Mimic` gym env whose cfg class mixes `MimicEnvCfg` into
+the base task cfg. The YAML has no `mimic:` block — the generated file
+starts at `DataGenConfig` defaults with an empty `subtask_configs`.
 
-```yaml
-subtask_terms:
-  grasp_brick_left:
-    func: grasp_brick_done                        # MDP function name; defaults to signal name
-    params:                                       # kwargs forwarded to the function
-      eef_link: left_wrist_yaw_link
-      object_name: red_brick
-      dist_threshold: 0.25
-      gripper_joint_pattern: "L_.*_proximal_joint"
-      gripper_closed_threshold: 1.3
-```
+Task-specific Mimic plumbing — `datagen_config` overrides, the per-EEF
+`SubTaskConfig` lists, the matching subtask-termination predicates, the
+`SubtaskTermsCfg` observation group, and any extra `DoneTerm` entries — is
+filled in by editing the generated files after running `create_task.py`:
 
-- **`func`** — name of the MDP function in the generated `mdp/observations.py`.
-  Multiple signals can share one function (DRY); the signal name is added as
-  a kwarg automatically. Omit `func` to get one stub per signal.
-- **`params`** — kwargs passed to that function. Parameter types are inferred
-  from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`) and used
-  to type the generated stub's signature.
+- Override `self.datagen_config.<field>` inside
+  `<task>_mimic_cfg.py.__post_init__` (see `DataGenConfig` in
+  `isaaclab/envs/mimic_env_cfg.py` for the full schema).
+- Define subtask predicate functions in
+  `tasks/manager_based/<task>/mdp/observations.py`.
+- Wire them into a `SubtaskTermsCfg(ObsGroup)` (group name `subtask_terms`)
+  inside `<task>_cfg.py`.
+- Add custom `DoneTerm` entries (e.g. a `success` predicate) to the same
+  file's `TerminationsCfg`, backed by functions in `mdp/terminations.py`.
+- Populate `self.subtask_configs[<eef_name>]` with the ordered
+  `SubTaskConfig` list inside `<task>_mimic_cfg.py.__post_init__`.
 
-### `terminations` (optional)
-
-Extra `DoneTerm` entries on the generated `TerminationsCfg`. The YAML key
-becomes the cfg attribute name; `func` resolves to a function in the
-generated `mdp/terminations.py`. The generator stubs each unique function
-with an inferred type signature (returning `False` for every env); you fill
-in the body.
-
-```yaml
-terminations:
-  success:
-    func: bricks_released_at_targets                # MDP function name
-    time_out: false                                 # optional; default false
-    params:                                         # kwargs forwarded to the function
-      left_object_name: red_brick
-      right_object_name: blue_brick
-      left_target_pos: [-0.4, 0.05, 0.83]
-      right_target_pos: [-0.4, -0.05, 0.83]
-      target_dist_threshold: 0.29
-      left_gripper_joint_pattern: "L_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
-      right_gripper_joint_pattern: "R_(index_proximal_joint|middle_proximal_joint|thumb_proximal_pitch_joint)"
-      gripper_open_threshold: 0.15
-```
-
-- **`func`** — name of the MDP function emitted into `mdp/terminations.py`.
-  Multiple termination entries can share one function (DRY); params are
-  unioned and the stub signature carries every distinct parameter.
-- **`params`** — kwargs passed to that function. Parameter types are
-  inferred from the YAML value (`str`, `int`, `float`, `tuple[float, ...]`)
-  and used to type the generated stub's signature.
-- **`time_out`** — defaults to `false`. Set `true` only for "ran out of time"
-  terminations; the conventional success signal used by Mimic data
-  generation keeps the default.
-- **Reserved names** — the attribute name `time_out` is taken by the
-  built-in DoneTerm. Pick anything else (`success`, `object_dropped`, …).
-
-### `mimic` (optional — Mimic data-generation pipeline)
-
-When present, a sibling `<task_id>-Mimic` env is registered with a cfg class
-that mixes `MimicEnvCfg` into the base task cfg.
-
-```yaml
-mimic:
-  datagen:                                        # passthrough to DataGenConfig
-    name: demo_src_lego_g1_D0
-    generation_guarantee: true
-    generation_num_trials: 1000
-    seed: 1
-    # ... any DataGenConfig field is accepted
-  subtasks:                                       # eef_name → ordered SubTaskConfig list
-    right:
-      - object_ref: blue_brick                    # scene object the subtask is "about"
-        subtask_term_signal: grasp_brick_right    # must match a key in subtask_terms
-        first_subtask_start_offset_range: [0, 0]
-        subtask_term_offset_range: [0, 0]
-        selection_strategy: nearest_neighbor_object
-        selection_strategy_kwargs:
-          nn_k: 3
-        action_noise: 0.003
-        num_interpolation_steps: 0
-        num_fixed_steps: 0
-        apply_noise_during_interpolation: false
-      # ...more subtasks; the last one uses subtask_term_signal: null to run
-      # "until end of demo".
-    left:
-      # ...mirror structure
-```
-
-- **`datagen`** — free-form passthrough; every key is forwarded as
-  `self.datagen_config.<key> = <value>`. See `DataGenConfig` in
-  `isaaclab/envs/mimic_env_cfg.py` for the full schema.
-- **`subtasks`** — mapping of `eef_name` (must appear in `eef.names`) to an
-  ordered list of `SubTaskConfig` entries. Each entry's keys are forwarded
-  as kwargs to `SubTaskConfig(...)`; tuple-typed fields are written as YAML
-  lists and coerced to tuples by `create_task.py`. Set
-  `subtask_term_signal: null` on the final entry of each arm to denote "run
-  until end of demo" per IsaacLab convention.
+See this example's `lego_g1_cfg.py` and `lego_g1_mimic_cfg.py` for the full
+shape.
 
 ## Scene assets
 

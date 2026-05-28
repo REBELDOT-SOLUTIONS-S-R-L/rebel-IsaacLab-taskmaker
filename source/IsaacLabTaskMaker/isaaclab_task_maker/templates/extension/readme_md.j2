@@ -11,7 +11,7 @@ pip install -e source/{{ package_name }}
 
 The editable install writes `{{ package_name }}_register.pth` into your
 site-packages, which auto-imports `{{ package_name }}` on Python startup. That
-import side-effects `gym.register(...)` for `{{ task_id }}`{% if mimic is not none %} and `{{ mimic.mimic_task_id }}`{% endif %},
+import side-effects `gym.register(...)` for `{{ task_id }}` and `{{ mimic_task_id }}`,
 so IsaacLab's stock launch scripts can find your task without any per-task
 patching.
 
@@ -23,11 +23,9 @@ Run IsaacLab's scripts directly — no per-project copies are needed:
 # Teleop the task
 ./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py --task {{ task_id }}
 
-{% if mimic is not none %}
 # Record annotated demos for the Mimic data-generation pipeline
-./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {{ mimic.mimic_task_id }}
+./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {{ mimic_task_id }}
 
-{% endif %}
 # Or run with random / zero actions
 ./isaaclab.sh -p scripts/environments/random_agent.py --task {{ task_id }}
 ./isaaclab.sh -p scripts/environments/zero_agent.py --task {{ task_id }}

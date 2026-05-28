@@ -11,15 +11,6 @@ in your task config's TerminationsCfg.
 Base terminations (time_out, etc.) are already available from isaaclab.envs.mdp.
 Shared IL helpers (get_object_pos, get_proximal_joint_mean, to_tensor, etc.) are
 available from the base_il_env mdp.
-{% if terminations.funcs %}
-
-This module defines the **termination predicates** declared under
-``terminations:`` in the task YAML. Each function returns a ``(num_envs,)``
-bool tensor that is ``True`` where the env should end for that reason
-(e.g. the success criterion for the Mimic data-generation pipeline). Known
-reference predicates are generated with concrete bodies; other generated
-predicates return ``False`` until you fill in the task geometry.
-{% endif %}
 """
 
 from __future__ import annotations
@@ -28,78 +19,12 @@ from typing import TYPE_CHECKING
 
 import torch
 
-{% set implemented_termination_funcs = ["bricks_released_at_targets"] %}
-{% set implemented_funcs = terminations.funcs | selectattr("name", "in", implemented_termination_funcs) | list %}
-{% if implemented_funcs %}
-from {{ package_name }}.base_il_env.mdp.observations import (
-    get_object_pos,
-    get_proximal_joint_mean,
-    to_tensor,
-)
-
-{% endif %}
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
-{% if terminations.funcs %}
-# ---------------------------------------------------------------------------
-# Termination predicates (DoneTerm functions)
-# ---------------------------------------------------------------------------
-{% for fn in terminations.funcs %}
-{% if fn.name == "bricks_released_at_targets" %}
-def bricks_released_at_targets(
-    env: "ManagerBasedRLEnv",
-    left_object_name: str,
-    right_object_name: str,
-    left_target_pos: tuple[float, float, float],
-    right_target_pos: tuple[float, float, float],
-    target_dist_threshold: float,
-    left_gripper_joint_pattern: str,
-    right_gripper_joint_pattern: str,
-    gripper_open_threshold: float,
-) -> torch.Tensor:
-    """Task success for data generation: both bricks are at targets and both hands are open."""
-    left_obj = get_object_pos(env, left_object_name)
-    right_obj = get_object_pos(env, right_object_name)
-    left_target = to_tensor(left_target_pos, env.device).expand_as(left_obj)
-    right_target = to_tensor(right_target_pos, env.device).expand_as(right_obj)
-
-    left_at_target = torch.norm(left_obj - left_target, dim=-1) <= target_dist_threshold
-    right_at_target = torch.norm(right_obj - right_target, dim=-1) <= target_dist_threshold
-    left_open = get_proximal_joint_mean(env, left_gripper_joint_pattern) <= gripper_open_threshold
-    right_open = get_proximal_joint_mean(env, right_gripper_joint_pattern) <= gripper_open_threshold
-
-    left_success = left_at_target & left_open
-    right_success = right_at_target & right_open
-    return left_success & right_success
-
-
-{% else %}
-def {{ fn.name }}(
-    env: "ManagerBasedRLEnv",
-{% for p in fn.params %}
-{% if p.type %}
-    {{ p.name }}: {{ p.type }},
-{% else %}
-    {{ p.name }},
-{% endif %}
-{% endfor %}
-) -> torch.Tensor:
-    """TODO: implement the ``{{ fn.name }}`` termination predicate.
-
-    Should return a ``(num_envs,)`` bool tensor that is ``True`` where the
-    env should terminate for this reason and ``False`` otherwise.
-    """
-    return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
-
-
-{% endif %}
-{% endfor %}
-{% else %}
 # Example: uncomment and customize
 # def object_dropped(env: ManagerBasedRLEnv) -> torch.Tensor:
 #     """Terminate if the object falls below a threshold."""
 #     object_pos = env.scene["object"].data.root_pos_w
 #     return object_pos[:, 2] < 0.1
-{% endif %}
