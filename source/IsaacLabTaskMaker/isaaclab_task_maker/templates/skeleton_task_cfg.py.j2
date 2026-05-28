@@ -370,21 +370,21 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
         init_state=AssetBaseCfg.InitialStateCfg(pos=({{ scene.pos }}), rot=({{ scene.rot }})),
     )
 
+{% if light %}
     dome_light: AssetBaseCfg = AssetBaseCfg(
-        prim_path="/World/DomeLight",
+        prim_path="{{ light.prim_path }}",
         spawn=sim_utils.DomeLightCfg(
-            intensity=1500.0,
-            color=(1.0, 1.0, 1.0),
+            intensity={{ light.intensity }},
+            color=({{ light.color }}),
         ),
     )
 
+{% endif %}
     {{ robot.name }}: ArticulationCfg = {{ robot.config_name }}.replace(
         prim_path="{{ robot.prim_path }}",
         init_state=ArticulationCfg.InitialStateCfg(
             pos=({{ robot.init_pos }}),
             rot=({{ robot.init_rot }}),
-            joint_pos={".*": 0.0},
-            joint_vel={".*": 0.0},
         ),
     )
 {% for obj in scene_objects %}
@@ -404,7 +404,7 @@ class {{ class_prefix }}SceneCfg(InteractiveSceneCfg):
             scale=({{ obj.scale }}),
 {% if obj.type in ["RigidObjectCfg", "AssetBaseCfg"] %}
             rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.05),
+            mass_props=sim_utils.MassPropertiesCfg(mass={{ obj.mass }}),
             collision_props=sim_utils.CollisionPropertiesCfg(),
 {% endif %}
         ),
@@ -438,16 +438,16 @@ class {{ class_prefix }}ActionsCfg:
 {% for side, frame in eef.frame_names.items() %}
                 FrameTask(
                     "{{ frame }}",
-                    position_cost=8.0,
-                    orientation_cost=2.0,
-                    lm_damping=10,
-                    gain=0.5,
+                    position_cost={{ ik.pink_position_cost }},
+                    orientation_cost={{ ik.pink_orientation_cost }},
+                    lm_damping={{ ik.pink_lm_damping }},
+                    gain={{ ik.pink_gain }},
                 ),
 {% endfor %}
 {% if ik.null_space_joints %}
                 NullSpacePostureTask(
-                    cost=0.5,
-                    lm_damping=1,
+                    cost={{ ik.pink_nullspace_cost }},
+                    lm_damping={{ ik.pink_nullspace_lm_damping }},
                     controlled_frames=[
 {% for frame in eef.frame_names.values() %}
                         "{{ frame }}",
@@ -458,7 +458,7 @@ class {{ class_prefix }}ActionsCfg:
                         "{{ joint }}",
 {% endfor %}
                     ],
-                    gain=0.3,
+                    gain={{ ik.pink_nullspace_gain }},
                 ),
 {% endif %}
             ],
@@ -865,18 +865,18 @@ class {{ class_prefix }}TaskCfg(BaseILEnvCfg):
             devices={
 {% if teleop.device == "keyboard" %}
                 "keyboard": Se3KeyboardCfg(
-                    pos_sensitivity=0.05,
-                    rot_sensitivity=0.05,
+                    pos_sensitivity={{ teleop.pos_sensitivity }},
+                    rot_sensitivity={{ teleop.rot_sensitivity }},
                 ),
 {% elif teleop.device == "spacemouse" %}
                 "spacemouse": Se3SpaceMouseCfg(
-                    pos_sensitivity=0.05,
-                    rot_sensitivity=0.05,
+                    pos_sensitivity={{ teleop.pos_sensitivity }},
+                    rot_sensitivity={{ teleop.rot_sensitivity }},
                 ),
 {% elif teleop.device == "gamepad" %}
                 "gamepad": Se3GamepadCfg(
-                    pos_sensitivity=10.0,
-                    rot_sensitivity=10.0,
+                    pos_sensitivity={{ teleop.pos_sensitivity }},
+                    rot_sensitivity={{ teleop.rot_sensitivity }},
                 ),
 {% endif %}
             }

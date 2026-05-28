@@ -82,6 +82,19 @@ class PhysicsMaterialConfig(BaseModel):
     restitution: float = 0.0
 
 
+class LightConfig(BaseModel):
+    """Optional top-level scene light.
+
+    When the top-level YAML omits ``light:``, the generator emits no light —
+    the scene USD is assumed to provide its own lighting. Set this block
+    explicitly when the scene USD has no lights of its own.
+    """
+
+    prim_path: str = "/World/DomeLight"
+    intensity: float = 1500.0
+    color: list[float] = [1.0, 1.0, 1.0]
+
+
 class ObjectResetConfig(BaseModel):
     """Optional per-object reset randomization emitted as EventTerm entries."""
 
@@ -102,6 +115,10 @@ class SceneObject(BaseModel):
     scale: list[float] = [1.0, 1.0, 1.0]
     init_pos: list[float]
     init_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
+    # Object mass in kg (default 0.05). Forwarded to MassPropertiesCfg.mass on
+    # the spawned rigid body. Override for objects with mass that meaningfully
+    # affects the contact dynamics (heavy bowls, light bricks, …).
+    mass: float = 0.05
     # When True, the spawner overrides the mesh collision approximation with SDF.
     # When False, the collision approximation baked into the USD is preserved.
     use_default_sdf_collision: bool = True
@@ -130,6 +147,19 @@ class IKControllerConfig(BaseModel):
     body_offset: list[float] = [0.0, 0.0, 0.0]
     # OSC specific
     nullspace_joint_pos_target: str = "zero"
+    # Pink IK FrameTask tuning. One set of values per task — each EEF frame
+    # task in the generated cfg uses these. Override per-task to tighten
+    # tracking, relax orientation, or adjust solver damping/gain.
+    pink_position_cost: float = 8.0
+    pink_orientation_cost: float = 2.0
+    pink_lm_damping: float = 10.0
+    pink_gain: float = 0.5
+    # Pink IK NullSpacePostureTask tuning (only emitted when ``null_space_joints``
+    # is non-empty). Keeps the rest of the body close to its initial pose while
+    # the EEFs track.
+    pink_nullspace_cost: float = 0.5
+    pink_nullspace_lm_damping: float = 1.0
+    pink_nullspace_gain: float = 0.3
 
     @field_validator("controller_type")
     @classmethod
@@ -198,6 +228,11 @@ class TeleopConfig(BaseModel):
     # but anything other than a robot sitting at (0, 0, 0) needs these set.
     xr_anchor_pos: list[float] = [0.0, 0.0, 0.0]
     xr_anchor_rot: list[float] = [1.0, 0.0, 0.0, 0.0]
+    # Per-device input sensitivities. ``None`` falls back to the per-device
+    # generator defaults (0.05 / 0.05 for keyboard + spacemouse, 10.0 / 10.0 for
+    # gamepad). Set explicitly to tune for the robot's action scale.
+    pos_sensitivity: Optional[float] = None
+    rot_sensitivity: Optional[float] = None
 
 
 class SimConfig(BaseModel):
@@ -228,6 +263,7 @@ class TaskDefinition(BaseModel):
     sim: SimConfig = SimConfig()
     observations: dict = {}
     resets: ResetDefaultsConfig = ResetDefaultsConfig()
+    light: Optional[LightConfig] = None
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +314,26 @@ def snake_to_pascal(name: str) -> str:
         part.upper() if part.isalpha() and len(part) <= 3 else part.capitalize()
         for part in name.split("_")
     )
+
+
+_DEVICE_DEFAULT_SENSITIVITY: dict[str, tuple[float, float]] = {
+    "keyboard": (0.05, 0.05),
+    "spacemouse": (0.05, 0.05),
+    "gamepad": (10.0, 10.0),
+}
+
+
+def _teleop_sensitivity(override: Optional[float], device: str, axis: Literal["pos", "rot"]) -> float:
+    """Resolve a per-device pos/rot sensitivity from YAML override + device defaults."""
+    if override is not None:
+        return override
+    defaults = _DEVICE_DEFAULT_SENSITIVITY.get(device)
+    if defaults is None:
+        # Non-Se3 devices (handtracking, etc.) don't consume sensitivity but the
+        # template still substitutes — fall back to keyboard defaults so we
+        # always emit a valid float.
+        defaults = _DEVICE_DEFAULT_SENSITIVITY["keyboard"]
+    return defaults[0] if axis == "pos" else defaults[1]
 
 
 def _join_floats(values: list[float]) -> str:
@@ -351,6 +407,7 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "scale": _join_floats(obj.scale),
             "init_pos": _join_floats(obj.init_pos),
             "init_rot": _join_floats(obj.init_rot),
+            "mass": obj.mass,
             "use_default_sdf_collision": obj.use_default_sdf_collision,
             "physics_material": physics_material,
             "visual_material": obj.visual_material,
@@ -395,6 +452,15 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "pos": _join_floats(cfg.scene.init_pos),
             "rot": _join_floats(cfg.scene.init_rot),
         },
+        "light": (
+            {
+                "prim_path": cfg.light.prim_path,
+                "intensity": cfg.light.intensity,
+                "color": _join_floats(cfg.light.color),
+            }
+            if cfg.light is not None
+            else None
+        ),
         "sim": {
             "decimation": cfg.sim.decimation,
             "episode_length_s": cfg.sim.episode_length_s,
@@ -422,6 +488,13 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "use_relative_mode": cfg.ik_controller.use_relative_mode,
             "body_offset": _join_floats(cfg.ik_controller.body_offset),
             "nullspace_joint_pos_target": cfg.ik_controller.nullspace_joint_pos_target,
+            "pink_position_cost": cfg.ik_controller.pink_position_cost,
+            "pink_orientation_cost": cfg.ik_controller.pink_orientation_cost,
+            "pink_lm_damping": cfg.ik_controller.pink_lm_damping,
+            "pink_gain": cfg.ik_controller.pink_gain,
+            "pink_nullspace_cost": cfg.ik_controller.pink_nullspace_cost,
+            "pink_nullspace_lm_damping": cfg.ik_controller.pink_nullspace_lm_damping,
+            "pink_nullspace_gain": cfg.ik_controller.pink_nullspace_gain,
         },
         "eef": {
             "names": cfg.eef.names,
@@ -453,6 +526,12 @@ def build_context(cfg: TaskDefinition, package_name: str) -> dict:
             "retargeter_class": cfg.teleop.retargeter_class,
             "xr_anchor_pos": _join_floats(cfg.teleop.xr_anchor_pos),
             "xr_anchor_rot": _join_floats(cfg.teleop.xr_anchor_rot),
+            "pos_sensitivity": _teleop_sensitivity(
+                cfg.teleop.pos_sensitivity, teleop_device, axis="pos"
+            ),
+            "rot_sensitivity": _teleop_sensitivity(
+                cfg.teleop.rot_sensitivity, teleop_device, axis="rot"
+            ),
         },
         "mimic_task_id": f"{cfg.task_id}-Mimic",
     }
