@@ -1,0 +1,105 @@
+# ============================================================
+# EXAMPLE: SO-100 5-DOF Low-Cost Arm + Joint Position Control
+# ============================================================
+#
+# Robot type:  5-DOF low-cost arm (LeRobot SO-100 / SO-101 family)
+# Controller:  joint_position — direct joint angle commands
+# Teleop:      Keyboard
+# Use case:    Simple joint-space control, trajectory replay,
+#              RL policy deployment on low-cost hardware
+#
+# Joint Position control is a great choice for the SO-100 because:
+#   - 5-DOF arms can't fully solve 6-DOF IK (under-constrained)
+#   - Joint-space avoids IK singularity issues entirely
+#   - Pre-recorded joint trajectories play back perfectly
+#   - Ideal for ACT/diffusion policies that output joint positions
+#
+# Compare with so100.yaml (differential_ik) to see how the same
+# robot can use a task-space controller instead.
+#
+# Run:
+#   python scripts/create_task.py so100_joint_position.yaml --dry-run
+#   python scripts/create_task.py so100_joint_position.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: so100_joint_pos
+task_id: IL-SO100-JointPos-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.so100
+  config_name: LEROBOT_SO100_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects:
+  - name: cube
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/cube"
+    usd_file: cube.usd
+    scale: [1.0, 1.0, 1.0]
+    init_pos: [0.2, 0.0, 0.025]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Joint Position control for SO-100:
+#   - 5 arm joints as controlled_joint_names
+#   - No hand_joint_names (the gripper "jaw" is not separate here;
+#     if you want gripper control, add "jaw" to hand_joint_names)
+#   - No IK-specific settings needed
+ik_controller:
+  controller_type: joint_position
+  controlled_joint_names:
+    - "shoulder_pan"
+    - "shoulder_lift"
+    - "elbow_flex"
+    - "wrist_flex"
+    - "wrist_roll"
+  hand_joint_names: []
+  num_hand_joints: 0
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+eef:
+  names: ["ee"]
+  target_links:
+    ee: jaw
+  frame_names:
+    ee: jaw
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    ee: jaw
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 4
+  episode_length_s: 20.0
+  dt: 0.01
+  render_interval: 2
+  env_spacing: 2.5

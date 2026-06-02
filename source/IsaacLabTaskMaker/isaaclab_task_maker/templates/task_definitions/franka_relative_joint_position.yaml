@@ -1,0 +1,104 @@
+# ============================================================
+# EXAMPLE: Franka Panda 7-DOF Arm + Relative Joint Position
+# ============================================================
+#
+# Robot type:  7-DOF robotic arm with parallel-jaw gripper
+# Controller:  relative_joint_position — incremental joint commands
+# Teleop:      Keyboard
+# Use case:    RL policies that output delta joint positions
+#
+# Relative Joint Position control commands incremental changes
+# to joint angles (deltas), not absolute targets. Each action
+# is added to the current joint position:
+#   new_pos = current_pos + action * scale
+#
+# This is commonly used by RL policies because:
+#   - Actions are naturally bounded (small deltas)
+#   - The policy doesn't need to know the current joint state
+#   - It maps well to neural network outputs
+#
+# Compare with franka_joint_position.yaml (absolute) to see
+# the difference — same robot, but commands are relative.
+#
+# Run:
+#   python scripts/create_task.py franka_relative_joint_position.yaml --dry-run
+#   python scripts/create_task.py franka_relative_joint_position.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: franka_rel_joint_pos
+task_id: IL-Franka-RelJointPos-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.franka
+  config_name: FRANKA_PANDA_HIGH_PD_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects: []
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Relative Joint Position control:
+#   - Same joint list as joint_position, but actions are deltas
+#   - No IK-specific settings needed
+#   - The "scale" parameter in the generated code controls
+#     how large each delta step is (default: 1.0)
+ik_controller:
+  controller_type: relative_joint_position
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5

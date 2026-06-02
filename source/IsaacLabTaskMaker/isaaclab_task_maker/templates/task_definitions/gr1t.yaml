@@ -1,0 +1,163 @@
+# ============================================================
+# EXAMPLE: Fourier GR1T2 Humanoid + Pink IK Controller
+# ============================================================
+#
+# Robot type:  Humanoid (dual-arm with dexterous hands)
+# Controller:  pink_ik — task-space IK using the Pink library
+# Teleop:      XR hand tracking (OpenXR)
+# Use case:    Bimanual manipulation with finger-level control
+#
+# This is a second humanoid example showing how Pink IK adapts
+# to different humanoid robots. Compare with example.yaml (G1)
+# to see the differences:
+#   - Different joint naming convention (explicit L/R vs regex)
+#   - Different URDF frame name prefix
+#   - Different retargeter class
+#   - Different null_space_joints configuration
+#
+# Run:
+#   python scripts/create_task.py gr1t.yaml --dry-run
+#   python scripts/create_task.py gr1t.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: tm7_gr1t
+task_id: IL-TM7-GR1T-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.fourier
+  config_name: GR1T2_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.9, 0.0]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects:
+  - name: tm7_bowl
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
+    usd_file: tm7_bowl_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.185]
+    init_rot: [0.70711, 0.0, 0.0, 0.70711]
+  - name: tm7_lid
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_lid"
+    usd_file: tm7_lid_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.2]
+    init_rot: [0.5, 0.5, -0.5, 0.5]
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Pink IK for GR1T2:
+#   - GR1T uses explicit joint names (left_shoulder_pitch_joint)
+#     vs. G1 which uses regex patterns (.*_shoulder_pitch_joint)
+#   - Both approaches work; use whichever matches your robot's URDF
+#   - null_space_joints includes both arm and waist joints here
+ik_controller:
+  controller_type: pink_ik
+  base_link_name: base_link
+  controlled_joint_names:
+    - "left_shoulder_pitch_joint"
+    - "left_shoulder_roll_joint"
+    - "left_shoulder_yaw_joint"
+    - "left_elbow_pitch_joint"
+    - "left_wrist_yaw_joint"
+    - "left_wrist_roll_joint"
+    - "left_wrist_pitch_joint"
+    - "right_shoulder_pitch_joint"
+    - "right_shoulder_roll_joint"
+    - "right_shoulder_yaw_joint"
+    - "right_elbow_pitch_joint"
+    - "right_wrist_yaw_joint"
+    - "right_wrist_roll_joint"
+    - "right_wrist_pitch_joint"
+  hand_joint_names:
+    - "L_index_proximal_joint"
+    - "L_middle_proximal_joint"
+    - "L_pinky_proximal_joint"
+    - "L_ring_proximal_joint"
+    - "L_thumb_proximal_yaw_joint"
+    - "R_index_proximal_joint"
+    - "R_middle_proximal_joint"
+    - "R_pinky_proximal_joint"
+    - "R_ring_proximal_joint"
+    - "R_thumb_proximal_yaw_joint"
+    - "L_index_intermediate_joint"
+    - "L_middle_intermediate_joint"
+    - "L_pinky_intermediate_joint"
+    - "L_ring_intermediate_joint"
+    - "L_thumb_proximal_pitch_joint"
+    - "R_index_intermediate_joint"
+    - "R_middle_intermediate_joint"
+    - "R_pinky_intermediate_joint"
+    - "R_ring_intermediate_joint"
+    - "R_thumb_proximal_pitch_joint"
+    - "L_thumb_distal_joint"
+    - "R_thumb_distal_joint"
+  num_hand_joints: 22
+  null_space_joints:
+    - "left_shoulder_pitch_joint"
+    - "left_shoulder_roll_joint"
+    - "left_shoulder_yaw_joint"
+    - "left_elbow_pitch_joint"
+    - "right_shoulder_pitch_joint"
+    - "right_shoulder_roll_joint"
+    - "right_shoulder_yaw_joint"
+    - "right_elbow_pitch_joint"
+    - "waist_yaw_joint"
+    - "waist_pitch_joint"
+    - "waist_roll_joint"
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+# frame_names use the GR1T2 URDF prefix: "GR1T2_fourier_hand_6dof_"
+# This prefix varies per robot — check your URDF to find the correct one.
+eef:
+  names: ["left", "right"]
+  target_links:
+    left_wrist: left_hand_pitch_link
+    right_wrist: right_hand_pitch_link
+  frame_names:
+    left: GR1T2_fourier_hand_6dof_left_hand_pitch_link
+    right: GR1T2_fourier_hand_6dof_right_hand_pitch_link
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    left: left_hand_pitch_link
+    right: right_hand_pitch_link
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+# Different retargeter class for GR1T2 (vs. UnitreeG1RetargeterCfg for G1).
+# Each humanoid needs its own retargeter to map XR hand tracking data
+# to the robot's specific joint configuration.
+teleop:
+  device: handtracking
+  retargeter_import: isaaclab.devices.openxr.retargeters
+  retargeter_class: GR1T2RetargeterCfg
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5

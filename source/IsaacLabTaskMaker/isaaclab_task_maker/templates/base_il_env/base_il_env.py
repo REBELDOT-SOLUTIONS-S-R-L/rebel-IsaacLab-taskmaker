@@ -75,8 +75,8 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
     ) -> torch.Tensor:
         """Convert target EEF poses + gripper actions into an env action tensor.
 
-        Builds the action by iterating over ``cfg.eef_names`` and concatenating
-        ``[pos(3), quat(4), gripper(N)]`` for each arm.
+        Builds the action tensor in the environment action layout described by
+        ``cfg.eef_action_slices`` and ``cfg.eef_gripper_slices``.
 
         Args:
             target_eef_pose_dict: Maps eef_name -> 4x4 target pose.
@@ -87,7 +87,17 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
         Returns:
             Flat action tensor compatible with env.step().
         """
-        parts = []
+        action_dim = 0
+        for eef_name in self.cfg.eef_names:
+            slices = self.cfg.eef_action_slices[eef_name]
+            action_dim = max(action_dim, slices["pos"][1], slices["quat"][1])
+            gripper_sel = self.cfg.eef_gripper_slices[eef_name]
+            if isinstance(gripper_sel, tuple) and len(gripper_sel) == 2:
+                action_dim = max(action_dim, gripper_sel[1])
+            else:
+                action_dim = max(action_dim, max(gripper_sel, default=-1) + 1)
+
+        action = None
 
         for eef_name in self.cfg.eef_names:
             target_pose = target_eef_pose_dict[eef_name]
@@ -103,9 +113,31 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
                 target_pos = target_pos + pos_noise
                 target_quat = target_quat + quat_noise
 
-            parts.append(torch.cat((target_pos, target_quat, gripper_action), dim=0))
+            if action is None:
+                action = torch.zeros(
+                    (*target_pos.shape[:-1], action_dim),
+                    dtype=target_pos.dtype,
+                    device=target_pos.device,
+                )
 
-        return torch.cat(parts, dim=0)
+            slices = self.cfg.eef_action_slices[eef_name]
+            pos_s, pos_e = slices["pos"]
+            quat_s, quat_e = slices["quat"]
+            action[..., pos_s:pos_e] = target_pos
+            action[..., quat_s:quat_e] = target_quat
+
+            gripper_sel = self.cfg.eef_gripper_slices[eef_name]
+            if isinstance(gripper_sel, tuple) and len(gripper_sel) == 2:
+                g_start, g_end = gripper_sel
+                action[..., g_start:g_end] = gripper_action
+            else:
+                idx = torch.as_tensor(gripper_sel, dtype=torch.long, device=action.device)
+                action[..., idx] = gripper_action
+
+        if action is None:
+            raise ValueError("Cannot build action because cfg.eef_names is empty.")
+
+        return action
 
     # ------------------------------------------------------------------
     # 3) action_to_target_eef_pose
@@ -142,7 +174,10 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
     def actions_to_gripper_actions(self, actions: torch.Tensor) -> dict[str, torch.Tensor]:
         """Extract per-EEF gripper actions from the full action tensor.
 
-        Uses ``cfg.eef_gripper_slices`` to know where gripper dimensions live.
+        ``cfg.eef_gripper_slices[eef_name]`` may be either:
+          * ``(start, end)`` — contiguous slice (e.g. simple parallel grippers).
+          * ``list[int]`` of column indices — for interleaved layouts like the
+            Inspire-hand where left/right finger joints are not contiguous.
 
         Args:
             actions: Action tensor of shape (num_envs, num_steps, action_dim)
@@ -153,6 +188,56 @@ class BaseILEnv(ManagerBasedRLMimicEnv):
         """
         result = {}
         for eef_name in self.cfg.eef_names:
-            g_start, g_end = self.cfg.eef_gripper_slices[eef_name]
-            result[eef_name] = actions[:, g_start:g_end]
+            sel = self.cfg.eef_gripper_slices[eef_name]
+            if isinstance(sel, tuple) and len(sel) == 2:
+                g_start, g_end = sel
+                result[eef_name] = actions[..., g_start:g_end]
+            else:
+                idx = torch.as_tensor(sel, dtype=torch.long, device=actions.device)
+                result[eef_name] = actions[..., idx]
         return result
+
+    # ------------------------------------------------------------------
+    # 5) get_object_poses
+    # ------------------------------------------------------------------
+    # The base class has a working implementation, but the Mimic recorder's
+    # _require_mimic_methods check rejects methods whose qualname starts with
+    # "ManagerBasedRLMimicEnv." — so we re-declare the same logic here.
+    def get_object_poses(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
+        """Return rigid-object poses as a dict of name -> 4x4 matrix."""
+        if env_ids is None:
+            env_ids = slice(None)
+
+        rigid_object_states = self.scene.get_state(is_relative=True)["rigid_object"]
+        object_pose_matrix: dict[str, torch.Tensor] = {}
+        for obj_name, obj_state in rigid_object_states.items():
+            root_pose = obj_state["root_pose"][env_ids]
+            object_pose_matrix[obj_name] = PoseUtils.make_pose(
+                root_pose[:, :3], PoseUtils.matrix_from_quat(root_pose[:, 3:7])
+            )
+        return object_pose_matrix
+
+    # ------------------------------------------------------------------
+    # 6) subtask signals (no-op defaults)
+    # ------------------------------------------------------------------
+    # Tasks that want automatic subtask annotation should override these in a
+    # task-specific BaseILEnv subclass. The empty-dict defaults keep the
+    # annotated Mimic recorder happy while leaving subtask annotation to be
+    # done manually.
+    def get_subtask_start_signals(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
+        return {}
+
+    def get_subtask_term_signals(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
+        return self.get_subtask_term_predicates(env_ids=env_ids)
+
+    def get_subtask_term_predicates(self, env_ids: Sequence[int] | None = None) -> dict[str, torch.Tensor]:
+        """Return raw 0/1 subtask predicates read from ``obs_buf["subtask_terms"]``.
+
+        Names returned here must match the ``subtask_term_signal`` values declared
+        in the task's Mimic cfg — the annotated-teleop recorder uses them as
+        queue heads.
+        """
+        if env_ids is None:
+            env_ids = slice(None)
+        subtask_terms = self.obs_buf.get("subtask_terms", {})
+        return {name: tensor[env_ids] for name, tensor in subtask_terms.items()}

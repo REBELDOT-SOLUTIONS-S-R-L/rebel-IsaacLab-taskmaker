@@ -35,9 +35,15 @@
 **/*.log*
 *.tmp
 
-# Recordings / datasets
+# Recordings / datasets (any depth)
 **/recordings/*
-/datasets/
+**/datasets/
+
+# Asset payloads kept outside git (any example, any source package)
+examples/**/assets/*
+!examples/**/assets/__init__.py
+source/*/*/assets/*
+!source/*/*/assets/__init__.py
 
 # Isaac Sim
 _isaac_sim*

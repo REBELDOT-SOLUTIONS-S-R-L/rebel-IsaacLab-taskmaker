@@ -1,0 +1,15 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""lego_g1 — auto-generated IsaacLab IL extension."""
+
+# Register Gym environments.
+from .tasks import *  # noqa: F401, F403
+
+# Register UI extensions (only available when Omniverse Kit is running).
+try:
+    from .ui_extension_example import *  # noqa: F401, F403
+except (ImportError, ModuleNotFoundError):
+    pass

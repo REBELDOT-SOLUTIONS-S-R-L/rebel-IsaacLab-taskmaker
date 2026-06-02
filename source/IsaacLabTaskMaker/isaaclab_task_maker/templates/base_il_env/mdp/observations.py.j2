@@ -1,0 +1,95 @@
+# Copyright (c) 2022-2026, The Isaac Lab Project Developers.
+# All rights reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""Observation functions for IL environments."""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+import torch
+
+if TYPE_CHECKING:
+    from isaaclab.envs import ManagerBasedRLEnv
+
+
+def get_eef_pos(env: ManagerBasedRLEnv, link_name: str) -> torch.Tensor:
+    """Get end-effector position relative to env origin.
+
+    Args:
+        env: The environment instance.
+        link_name: Name of the EEF body/link in the URDF/USD.
+
+    Returns:
+        EEF position tensor of shape (num_envs, 3).
+    """
+    body_pos_w = env.scene["{{ robot.name }}"].data.body_pos_w
+    eef_idx = env.scene["{{ robot.name }}"].data.body_names.index(link_name)
+    eef_pos = body_pos_w[:, eef_idx] - env.scene.env_origins
+    return eef_pos
+
+
+def get_eef_quat(env: ManagerBasedRLEnv, link_name: str) -> torch.Tensor:
+    """Get end-effector quaternion (w, x, y, z).
+
+    Args:
+        env: The environment instance.
+        link_name: Name of the EEF body/link in the URDF/USD.
+
+    Returns:
+        EEF quaternion tensor of shape (num_envs, 4).
+    """
+    body_quat_w = env.scene["{{ robot.name }}"].data.body_quat_w
+    eef_idx = env.scene["{{ robot.name }}"].data.body_names.index(link_name)
+    eef_quat = body_quat_w[:, eef_idx]
+    return eef_quat
+
+
+def get_object_pos(env: ManagerBasedRLEnv, object_name: str) -> torch.Tensor:
+    """Get object root position relative to env origin.
+
+    Args:
+        env: The environment instance.
+        object_name: Name of the object in the scene.
+
+    Returns:
+        Object position tensor of shape (num_envs, 3).
+    """
+    return env.scene[object_name].data.root_pos_w - env.scene.env_origins
+
+
+def to_tensor(values, device) -> torch.Tensor:
+    """Convert values to a float tensor on the requested device."""
+    return torch.as_tensor(values, dtype=torch.float, device=device)
+
+
+def get_robot_joint_state(
+    env: ManagerBasedRLEnv,
+    joint_names: list[str],
+) -> torch.Tensor:
+    """Get a subset of robot joint positions by name (supports regex).
+
+    Args:
+        env: The environment instance.
+        joint_names: List of joint name patterns (regex supported).
+
+    Returns:
+        Joint position tensor of shape (num_envs, num_matched_joints).
+    """
+    indexes, _ = env.scene["{{ robot.name }}"].find_joints(joint_names)
+    indexes = torch.tensor(indexes, dtype=torch.long)
+    return env.scene["{{ robot.name }}"].data.joint_pos[:, indexes]
+
+
+def get_all_robot_link_state(env: ManagerBasedRLEnv) -> torch.Tensor:
+    """Get all robot link states (pos + quat + vel).
+
+    Args:
+        env: The environment instance.
+
+    Returns:
+        All link state tensor of shape (num_envs, num_bodies, state_dim).
+    """
+    return env.scene["{{ robot.name }}"].data.body_link_state_w[:, :, :]

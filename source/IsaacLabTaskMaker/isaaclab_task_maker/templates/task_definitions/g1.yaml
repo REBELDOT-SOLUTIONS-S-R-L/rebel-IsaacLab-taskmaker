@@ -1,0 +1,188 @@
+# ============================================================
+# EXAMPLE: Unitree G1 Humanoid + Pink IK Controller
+# ============================================================
+#
+# Robot type:  Humanoid (dual-arm with dexterous hands)
+# Controller:  pink_ik — task-space IK using the Pink library
+# Teleop:      XR hand tracking (OpenXR)
+# Use case:    Bimanual manipulation with finger-level control
+#
+# Pink IK is the recommended controller for humanoid robots
+# with XR hand tracking. It solves full-body IK including
+# finger joints, and supports null-space posture control to
+# keep the torso stable while the arms move.
+#
+# Run:
+#   python scripts/create_task.py example.yaml --dry-run   # preview
+#   python scripts/create_task.py example.yaml              # generate
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+# task_name:  Snake_case name used for the folder and Python class prefix.
+#             "tm7_g1" generates class TM7G1TaskCfg in tasks/manager_based/tm7_g1/
+# task_id:    Gymnasium environment ID used to register and launch the task.
+task_name: sort_kitchen_g1
+task_id: IL-SORT-KITCHEN-G1-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+# import_path:  Python module containing the ArticulationCfg.
+# config_name:  Name of the ArticulationCfg variable in that module.
+# prim_path:    USD scene path pattern (env_.* is replaced per environment).
+# init_pos:     Initial position [x, y, z] in meters.
+# init_rot:     Initial rotation [w, x, y, z] as a quaternion.
+robot:
+  import_path: isaaclab_assets.robots.unitree
+  config_name: G1_INSPIRE_FTP_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.9, 0.0]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+# The scene USD is loaded from: assets/scenes/<usd_file>
+# Place your scene USD file there after generating the task.
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS (optional) ────────────────────────────────
+# Rigid bodies that the robot interacts with. Each object needs:
+#   name:      Unique identifier (becomes a Python attribute)
+#   type:      Usually "RigidObjectCfg"
+#   prim_path: USD path in the scene ({ENV_REGEX_NS} = per-env prefix)
+#   usd_file:  Filename in assets/objects/
+#   scale:     Scale factor [x, y, z]
+#   init_pos:  Initial position [x, y, z] in meters
+#   init_rot:  Initial rotation [w, x, y, z] quaternion
+scene_objects:
+  - name: tm7_bowl
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_bowl"
+    usd_file: tm7_bowl_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.185]
+    init_rot: [0.70711, 0.0, 0.0, 0.70711]
+  - name: tm7_lid
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/tm7_lid"
+    usd_file: tm7_lid_collisions.usd
+    scale: [0.35, 0.35, 0.35]
+    init_pos: [0.0, 0.5, 0.2]
+    init_rot: [0.5, 0.5, -0.5, 0.5]
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# controller_type: "pink_ik"
+#   Pink IK is a task-space inverse kinematics solver from the Pink library.
+#   It works with URDF models and supports multiple simultaneous tasks
+#   (e.g., left hand + right hand + posture).
+#
+# REQUIRED for pink_ik:
+#   base_link_name:         Root link of the kinematic chain
+#   controlled_joint_names: All joints the IK solver can move (arms)
+#   hand_joint_names:       Finger joints (mapped from XR hand tracking)
+#   num_hand_joints:        Total number of finger joints
+#
+# OPTIONAL for pink_ik:
+#   null_space_joints:      Joints for posture control (e.g., waist).
+#                           These are used to keep the torso stable
+#                           while the arms move freely.
+ik_controller:
+  controller_type: pink_ik
+  base_link_name: pelvis
+  controlled_joint_names:
+    - ".*_shoulder_pitch_joint"
+    - ".*_shoulder_roll_joint"
+    - ".*_shoulder_yaw_joint"
+    - ".*_elbow_joint"
+    - ".*_wrist_yaw_joint"
+    - ".*_wrist_roll_joint"
+    - ".*_wrist_pitch_joint"
+  hand_joint_names:
+    - "L_index_proximal_joint"
+    - "L_middle_proximal_joint"
+    - "L_pinky_proximal_joint"
+    - "L_ring_proximal_joint"
+    - "L_thumb_proximal_yaw_joint"
+    - "R_index_proximal_joint"
+    - "R_middle_proximal_joint"
+    - "R_pinky_proximal_joint"
+    - "R_ring_proximal_joint"
+    - "R_thumb_proximal_yaw_joint"
+    - "L_index_intermediate_joint"
+    - "L_middle_intermediate_joint"
+    - "L_pinky_intermediate_joint"
+    - "L_ring_intermediate_joint"
+    - "L_thumb_proximal_pitch_joint"
+    - "R_index_intermediate_joint"
+    - "R_middle_intermediate_joint"
+    - "R_pinky_intermediate_joint"
+    - "R_ring_intermediate_joint"
+    - "R_thumb_proximal_pitch_joint"
+    - "L_thumb_intermediate_joint"
+    - "R_thumb_intermediate_joint"
+    - "L_thumb_distal_joint"
+    - "R_thumb_distal_joint"
+  num_hand_joints: 24
+  null_space_joints:
+    - "waist_yaw_joint"
+    - "waist_pitch_joint"
+    - "waist_roll_joint"
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+# For dual-arm humanoids with pink_ik:
+#   names:        Logical EEF identifiers (used in observations)
+#   target_links: Map of logical name → robot link name (for IK targets)
+#   frame_names:  Map of logical name → URDF frame name (Pink IK requires
+#                 the full URDF-prefixed link name, not the USD link name)
+eef:
+  names: ["left", "right"]
+  target_links:
+    left_wrist: left_wrist_yaw_link
+    right_wrist: right_wrist_yaw_link
+  frame_names:
+    left: g1_29dof_rev_1_0_left_wrist_yaw_link
+    right: g1_29dof_rev_1_0_right_wrist_yaw_link
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+# eef_link_names: Links whose poses are included in observations.
+# Must match target_links values (the robot link names, not URDF frames).
+observations:
+  eef_link_names:
+    left: left_wrist_yaw_link
+    right: right_wrist_yaw_link
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+# device: "handtracking" — uses OpenXR hand tracking for bimanual teleop.
+#         Other options: "manusvive", "keyboard", "spacemouse", "gamepad"
+#
+# For pink_ik + hand tracking, you must specify:
+#   retargeter_import: Python import path to the retargeter module
+#   retargeter_class:  Name of the retargeter config class
+teleop:
+  device: handtracking
+  retargeter_import: isaaclab.devices.openxr.retargeters.humanoid.unitree.inspire.g1_upper_body_retargeter
+  retargeter_class: UnitreeG1RetargeterCfg
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+# decimation:       Number of sim steps per policy step (higher = smoother but slower)
+# episode_length_s: Max episode duration in seconds
+# dt:               Physics timestep (1/120 ≈ 0.008333)
+# render_interval:  Render every N sim steps
+# env_spacing:      Distance between parallel environments in meters
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5

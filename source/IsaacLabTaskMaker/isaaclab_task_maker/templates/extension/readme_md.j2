@@ -1,0 +1,53 @@
+# {{ title }}
+
+Auto-generated IsaacLab IL extension for the **{{ task_id }}** task.
+
+## Installation
+
+```bash
+cd {{ project_dir_name }}
+pip install -e source/{{ package_name }}
+```
+
+The editable install writes `{{ package_name }}_register.pth` into your
+site-packages, which auto-imports `{{ package_name }}` on Python startup. That
+import side-effects `gym.register(...)` for `{{ task_id }}` and `{{ mimic_task_id }}`,
+so IsaacLab's stock launch scripts can find your task without any per-task
+patching.
+
+## Usage
+
+Run IsaacLab's scripts directly — no per-project copies are needed:
+
+```bash
+# Teleop the task
+./isaaclab.sh -p scripts/environments/teleoperation/teleop_se3_agent.py --task {{ task_id }}
+
+# Record annotated demos for the Mimic data-generation pipeline
+./isaaclab.sh -p scripts/tools/record_annotated_demos.py --task {{ mimic_task_id }}
+
+# Or run with random / zero actions
+./isaaclab.sh -p scripts/environments/random_agent.py --task {{ task_id }}
+./isaaclab.sh -p scripts/environments/zero_agent.py --task {{ task_id }}
+```
+
+Useful teleop flags:
+
+- `--teleop_device handtracking` (pink_ik tasks) or `keyboard` / `spacemouse` / `gamepad`
+- `--dataset_dir ./datasets/{{ task_name }} --dataset_file run0` to override the recorder's HDF5 target
+- `--enable_pinocchio` when the task uses pink_ik
+
+## Project Structure
+
+```
+source/{{ package_name }}/{{ package_name }}/
+├── assets/          # USD scene, object, and robot files
+├── base_il_env/     # Base IL environment (shared across tasks)
+└── tasks/           # Task-specific configurations and MDP functions
+```
+
+## Customization
+
+- Edit `tasks/manager_based/{{ task_name }}/{{ task_name }}_cfg.py` for task configuration
+- Add custom MDP functions in `tasks/manager_based/{{ task_name }}/mdp/`
+- Place USD files in the `assets/` subdirectories

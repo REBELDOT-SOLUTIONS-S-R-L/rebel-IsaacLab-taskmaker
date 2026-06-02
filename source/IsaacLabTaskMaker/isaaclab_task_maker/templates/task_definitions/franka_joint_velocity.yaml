@@ -1,0 +1,102 @@
+# ============================================================
+# EXAMPLE: Franka Panda 7-DOF Arm + Joint Velocity Control
+# ============================================================
+#
+# Robot type:  7-DOF robotic arm with parallel-jaw gripper
+# Controller:  joint_velocity — direct joint velocity commands
+# Teleop:      Keyboard
+# Use case:    Velocity-based control, smooth continuous motion
+#
+# Joint Velocity control commands desired joint angular velocities
+# (rad/s). The robot's internal controller tracks these velocities.
+#
+# This is useful when:
+#   - Your policy outputs desired joint velocities
+#   - You need smooth, continuous motion without discrete steps
+#   - You want velocity-level servoing
+#
+# NOTE: The gripper still uses joint_position control (binary
+# open/close), only the arm uses velocity commands.
+#
+# Run:
+#   python scripts/create_task.py franka_joint_velocity.yaml --dry-run
+#   python scripts/create_task.py franka_joint_velocity.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: franka_joint_vel
+task_id: IL-Franka-JointVel-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.franka
+  config_name: FRANKA_PANDA_HIGH_PD_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects: []
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Joint Velocity control:
+#   - Actions are desired angular velocities (rad/s) per joint
+#   - No IK computation; commands go directly to the joint controller
+#   - hand_joint_names generate a separate JointPositionActionCfg
+#     for the gripper (grippers typically use position control)
+ik_controller:
+  controller_type: joint_velocity
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5

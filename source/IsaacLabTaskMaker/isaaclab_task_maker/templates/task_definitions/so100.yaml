@@ -1,0 +1,115 @@
+# ============================================================
+# EXAMPLE: SO-100 5-DOF Low-Cost Arm + Differential IK
+# ============================================================
+#
+# Robot type:  5-DOF low-cost arm (LeRobot SO-100 / SO-101 family)
+# Controller:  differential_ik — resolved-rate IK using Jacobian
+# Teleop:      Keyboard
+# Use case:    Tabletop manipulation with affordable hardware
+#
+# The SO-100 is a 5-DOF arm from the LeRobot ecosystem.
+# It has fewer joints than a 7-DOF arm, so it cannot achieve
+# arbitrary end-effector orientations — use command_type: "position"
+# (3-DOF) for best results, or "pose" if limited orientation
+# control is acceptable.
+#
+# NOTE: SO-101 uses the same configuration pattern. If your
+# Isaac Lab installation includes LEROBOT_SO101_CFG, simply
+# change config_name below.
+#
+# Run:
+#   python scripts/create_task.py so100.yaml --dry-run
+#   python scripts/create_task.py so100.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: so100
+task_id: IL-SO100-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+# SO-100: 5 arm joints (shoulder_pan, shoulder_lift, elbow_flex,
+# wrist_flex, wrist_roll) + 1 gripper joint (jaw).
+robot:
+  import_path: isaaclab_assets.robots.so100
+  config_name: LEROBOT_SO100_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects:
+  - name: target_object
+    type: RigidObjectCfg
+    prim_path: "{ENV_REGEX_NS}/Scene/target_object"
+    usd_file: target_object.usd
+    scale: [1.0, 1.0, 1.0]
+    init_pos: [0.25, 0.0, 0.05]
+    init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Differential IK for a 5-DOF arm:
+#   - Only 5 controlled joints (no hand_joint_names since the
+#     gripper "jaw" is not part of the IK chain)
+#   - Use ik_method: "dls" for stability with fewer DOF
+#   - command_type: "pose" works but orientation is under-constrained
+#     with only 5 DOF; consider "position" for 3-DOF control
+ik_controller:
+  controller_type: differential_ik
+  base_link_name: base_link
+  controlled_joint_names:
+    - "shoulder_pan"
+    - "shoulder_lift"
+    - "elbow_flex"
+    - "wrist_flex"
+    - "wrist_roll"
+  hand_joint_names: []
+  num_hand_joints: 0
+  ik_method: dls
+  command_type: pose
+  use_relative_mode: false
+  body_offset: [0.0, 0.0, 0.0]
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+# The SO-100 end-effector is the "jaw" link (gripper tip).
+eef:
+  names: ["ee"]
+  target_links:
+    ee: jaw
+  frame_names:
+    ee: jaw
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    ee: jaw
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+# Lower decimation (4) and higher dt (0.01 = 100 Hz) for a lighter robot.
+sim:
+  decimation: 4
+  episode_length_s: 20.0
+  dt: 0.01
+  render_interval: 2
+  env_spacing: 2.5

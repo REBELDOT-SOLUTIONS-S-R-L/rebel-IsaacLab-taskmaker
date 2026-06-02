@@ -1,0 +1,111 @@
+# ============================================================
+# EXAMPLE: Franka Panda 7-DOF Arm + Operational Space Controller
+# ============================================================
+#
+# Robot type:  7-DOF robotic arm with parallel-jaw gripper
+# Controller:  operational_space — impedance-based task-space control
+# Teleop:      Keyboard
+# Use case:    Contact-rich tasks, compliant manipulation, force control
+#
+# The Operational Space Controller (OSC) computes joint torques
+# to achieve desired task-space motion while maintaining a
+# specified impedance (stiffness + damping). Unlike Differential
+# IK which commands joint positions, OSC directly outputs torques,
+# making it ideal for:
+#   - Contact-rich manipulation (wiping, polishing)
+#   - Compliant insertion tasks
+#   - Tasks requiring force regulation
+#
+# Key settings for operational_space:
+#   body_offset:                  Offset from body frame to EEF tip
+#   nullspace_joint_pos_target:   "zero" = keep joints near zero,
+#                                 or provide explicit joint positions
+#
+# Compare with franka_panda.yaml (differential_ik) to see how the
+# same robot can use a different controller.
+#
+# Run:
+#   python scripts/create_task.py franka_operational_space.yaml --dry-run
+#   python scripts/create_task.py franka_operational_space.yaml
+#
+# ============================================================
+
+
+# ─── TASK IDENTITY ───────────────────────────────────────────
+task_name: franka_osc
+task_id: IL-Franka-OSC-v0
+
+
+# ─── ROBOT ───────────────────────────────────────────────────
+robot:
+  import_path: isaaclab_assets.robots.franka
+  config_name: FRANKA_PANDA_HIGH_PD_CFG
+  prim_path: "/World/envs/env_.*/Robot"
+  init_pos: [0.0, 0.5, 0.4]
+  init_rot: [0.7071, 0.0, 0.0, -0.7071]
+
+
+# ─── SCENE USD ───────────────────────────────────────────────
+scene:
+  usd_file: scene.usd
+  scale: [1.0, 1.0, 1.0]
+  init_pos: [0.0, 0.0, 0.0]
+  init_rot: [1.0, 0.0, 0.0, 0.0]
+
+
+# ─── SCENE OBJECTS ───────────────────────────────────────────
+scene_objects: []
+
+
+# ─── IK CONTROLLER ───────────────────────────────────────────
+# Operational Space Controller settings:
+#   - Uses impedance control: motion_stiffness + damping ratio
+#   - nullspace_joint_pos_target keeps redundant DOFs near a
+#     reference configuration (prevents elbow drift)
+#   - body_offset shifts the control point to the fingertip
+ik_controller:
+  controller_type: operational_space
+  base_link_name: panda_link0
+  controlled_joint_names:
+    - "panda_joint1"
+    - "panda_joint2"
+    - "panda_joint3"
+    - "panda_joint4"
+    - "panda_joint5"
+    - "panda_joint6"
+    - "panda_joint7"
+  hand_joint_names:
+    - "panda_finger_joint1"
+    - "panda_finger_joint2"
+  num_hand_joints: 2
+  body_offset: [0.0, 0.0, 0.107]
+  nullspace_joint_pos_target: "zero"
+
+
+# ─── END-EFFECTORS ───────────────────────────────────────────
+eef:
+  names: ["gripper"]
+  target_links:
+    gripper: panda_hand
+  frame_names:
+    gripper: panda_hand
+
+
+# ─── OBSERVATIONS ────────────────────────────────────────────
+observations:
+  eef_link_names:
+    gripper: panda_hand
+
+
+# ─── TELEOP ──────────────────────────────────────────────────
+teleop:
+  device: keyboard
+
+
+# ─── SIMULATION ──────────────────────────────────────────────
+sim:
+  decimation: 6
+  episode_length_s: 20.0
+  dt: 0.008333
+  render_interval: 2
+  env_spacing: 2.5
