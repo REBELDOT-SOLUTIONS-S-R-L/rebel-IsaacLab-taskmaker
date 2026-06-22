@@ -199,7 +199,7 @@ class CameraConfig(BaseModel):
     """Pinhole camera attached to a robot link.
 
     Emitted as ``scene.<name>`` and also re-attached after the XR pipeline strips
-    cameras (when running pink_ik teleop). Mirrors the upstream ``CameraCfg``
+    cameras (when running pink_ik teleop). Mirrors the upstream ``TiledCameraCfg``
     surface — only the fields commonly tweaked per-task are exposed here.
     """
 

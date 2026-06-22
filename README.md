@@ -408,7 +408,7 @@ observations:
 
 ### `cameras` (optional)
 
-Each entry becomes a `CameraCfg` on the scene cfg and is re-attached by
+Each entry becomes a `TiledCameraCfg` on the scene cfg and is re-attached by
 `attach_cameras(scene_cfg)` after IsaacLab's XR pipeline strips cameras via
 `remove_camera_configs`. The `xr_camera_reattach` hook on `BaseILEnvCfg`
 calls that helper automatically.

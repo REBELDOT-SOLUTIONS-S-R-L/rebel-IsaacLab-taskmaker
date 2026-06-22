@@ -27,7 +27,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import CameraCfg
+from isaaclab.sensors import TiledCameraCfg
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
 
@@ -241,9 +241,9 @@ def attach_cameras(scene_cfg) -> None:
     """Attach the head + wrist cameras to a LegoG1 scene cfg.
 
     Kept as a module-level helper so the teleop launcher can re-attach them after
-    IsaacLab's XR pipeline strips CameraCfg attributes via remove_camera_configs.
+    IsaacLab's XR pipeline strips camera cfg attributes via remove_camera_configs.
     """
-    scene_cfg.head_camera = CameraCfg(
+    scene_cfg.head_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/torso_link/d435_link/head_camera",
         update_period=0.0,
         height=480,
@@ -255,13 +255,13 @@ def attach_cameras(scene_cfg) -> None:
             horizontal_aperture=20.955,
             clipping_range=(0.05, 10.0),
         ),
-        offset=CameraCfg.OffsetCfg(
+        offset=TiledCameraCfg.OffsetCfg(
             pos=(0.0, 0.0, 0.0),
             rot=(0.5, 0.5, -0.5, -0.5),
             convention="opengl",
         ),
     )
-    scene_cfg.right_wrist_camera = CameraCfg(
+    scene_cfg.right_wrist_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/right_wrist_yaw_link/right_wrist_camera",
         update_period=0.0,
         height=480,
@@ -273,13 +273,13 @@ def attach_cameras(scene_cfg) -> None:
             horizontal_aperture=20.955,
             clipping_range=(0.05, 10.0),
         ),
-        offset=CameraCfg.OffsetCfg(
+        offset=TiledCameraCfg.OffsetCfg(
             pos=(0.01, 0.05, 0.12),
             rot=(0.65326, 0.27061, -0.27059, -0.6533),
             convention="opengl",
         ),
     )
-    scene_cfg.left_wrist_camera = CameraCfg(
+    scene_cfg.left_wrist_camera = TiledCameraCfg(
         prim_path="{ENV_REGEX_NS}/Robot/left_wrist_yaw_link/left_wrist_camera",
         update_period=0.0,
         height=480,
@@ -291,7 +291,7 @@ def attach_cameras(scene_cfg) -> None:
             horizontal_aperture=20.955,
             clipping_range=(0.05, 10.0),
         ),
-        offset=CameraCfg.OffsetCfg(
+        offset=TiledCameraCfg.OffsetCfg(
             pos=(0.01, -0.05, 0.12),
             rot=(0.65328, 0.2706, -0.2706, -0.65328),
             convention="opengl",
@@ -492,7 +492,6 @@ class LegoG1ObservationsCfg:
         grasp_brick_left = ObsTerm(
             func=mdp.grasp_brick_done,
             params={
-                "signal_name": "grasp_brick_left",
                 "eef_link": _LEFT_EEF_LINK,
                 "object_name": _LEFT_BRICK,
                 "dist_threshold": _DIST_TO_BRICK_THRESHOLD,
@@ -503,7 +502,6 @@ class LegoG1ObservationsCfg:
         move_brick_left = ObsTerm(
             func=mdp.move_brick_done,
             params={
-                "signal_name": "move_brick_left",
                 "eef_link": _LEFT_EEF_LINK,
                 "object_name": _LEFT_BRICK,
                 "target_pos": _LEFT_TARGET_POS,
@@ -516,7 +514,6 @@ class LegoG1ObservationsCfg:
         release_brick_left = ObsTerm(
             func=mdp.release_brick_done,
             params={
-                "signal_name": "release_brick_left",
                 "object_name": _LEFT_BRICK,
                 "target_pos": _LEFT_TARGET_POS,
                 "target_dist_threshold": _BRICK_TO_TARGET_THRESHOLD,
@@ -527,7 +524,6 @@ class LegoG1ObservationsCfg:
         idle_left = ObsTerm(
             func=mdp.idle_done,
             params={
-                "signal_name": "idle_left",
                 "eef_link": _LEFT_EEF_LINK,
                 "idle_pos": _LEFT_IDLE_POS,
                 "threshold": _IDLE_BOX_HALF_EXTENT,
@@ -538,7 +534,6 @@ class LegoG1ObservationsCfg:
         grasp_brick_right = ObsTerm(
             func=mdp.grasp_brick_done,
             params={
-                "signal_name": "grasp_brick_right",
                 "eef_link": _RIGHT_EEF_LINK,
                 "object_name": _RIGHT_BRICK,
                 "dist_threshold": _DIST_TO_BRICK_THRESHOLD,
@@ -549,7 +544,6 @@ class LegoG1ObservationsCfg:
         move_brick_right = ObsTerm(
             func=mdp.move_brick_done,
             params={
-                "signal_name": "move_brick_right",
                 "eef_link": _RIGHT_EEF_LINK,
                 "object_name": _RIGHT_BRICK,
                 "target_pos": _RIGHT_TARGET_POS,
@@ -562,7 +556,6 @@ class LegoG1ObservationsCfg:
         release_brick_right = ObsTerm(
             func=mdp.release_brick_done,
             params={
-                "signal_name": "release_brick_right",
                 "object_name": _RIGHT_BRICK,
                 "target_pos": _RIGHT_TARGET_POS,
                 "target_dist_threshold": _BRICK_TO_TARGET_THRESHOLD,
@@ -573,7 +566,6 @@ class LegoG1ObservationsCfg:
         idle_right = ObsTerm(
             func=mdp.idle_done,
             params={
-                "signal_name": "idle_right",
                 "eef_link": _RIGHT_EEF_LINK,
                 "idle_pos": _RIGHT_IDLE_POS,
                 "threshold": _IDLE_BOX_HALF_EXTENT,
@@ -601,29 +593,64 @@ class LegoG1EventCfg:
         params={"asset_cfg": SceneEntityCfg("unitree_g1")},
     )
 
-    reset_sobol_objects = EventTerm(
-        func=mdp.reset_root_state_sobol,
+    # Uniform (torch-RNG) resets instead of Sobol. These draw a fresh
+    # pseudo-random pose every episode from the global RNG, so the generated
+    # episodes do NOT replay the deterministic Sobol sequence used at record
+    # time. Ranges match what was recorded; run generation with a different
+    # `--seed` than recording to guarantee distinct layouts.
+    reset_blue_brick = EventTerm(
+        func=base_mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "asset_cfgs": {
-                "blue_brick": SceneEntityCfg("blue_brick"),
-                "red_brick": SceneEntityCfg("red_brick"),
-                "plate": SceneEntityCfg("plate"),
-            },
-            "pose_ranges": {
-                "blue_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
-                "red_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
-                "plate": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "yaw": (-0.5, 0.5)},
-            },
-            "velocity_ranges": {
-                "blue_brick": {},
-                "red_brick": {},
-                "plate": {},
-            },
-            "seed": 0,
-            "advance_on_success_only": True,
+            "asset_cfg": SceneEntityCfg("blue_brick"),
+            "pose_range": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+            "velocity_range": {},
         },
     )
+
+    reset_red_brick = EventTerm(
+        func=base_mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("red_brick"),
+            "pose_range": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+            "velocity_range": {},
+        },
+    )
+
+    reset_plate = EventTerm(
+        func=base_mdp.reset_root_state_uniform,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("plate"),
+            "pose_range": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "yaw": (-0.5, 0.5)},
+            "velocity_range": {},
+        },
+    )
+
+    # reset_sobol_objects = EventTerm(
+    #     func=mdp.reset_root_state_sobol,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfgs": {
+    #             "blue_brick": SceneEntityCfg("blue_brick"),
+    #             "red_brick": SceneEntityCfg("red_brick"),
+    #             "plate": SceneEntityCfg("plate"),
+    #         },
+    #         "pose_ranges": {
+    #             "blue_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+    #             "red_brick": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "yaw": (-0.5, 0.5)},
+    #             "plate": {"x": (-0.02, 0.02), "y": (-0.02, 0.02), "yaw": (-0.5, 0.5)},
+    #         },
+    #         "velocity_ranges": {
+    #             "blue_brick": {},
+    #             "red_brick": {},
+    #             "plate": {},
+    #         },
+    #         "seed": 0,
+    #         "advance_on_success_only": True,
+    #     },
+    # )
 
 
 @configclass

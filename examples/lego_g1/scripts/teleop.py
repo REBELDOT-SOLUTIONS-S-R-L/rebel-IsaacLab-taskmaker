@@ -7,7 +7,7 @@
 
 Forked from `IsaacLab/scripts/environments/teleoperation/teleop_se3_agent.py`.
 The only functional change vs upstream: when XR is enabled, IsaacLab strips
-every CameraCfg from the scene (`remove_camera_configs`). For LegoG1 we want
+every camera cfg from the scene (`remove_camera_configs`). For LegoG1 we want
 the head + wrist cameras to remain, so we re-attach them after the strip via
 `attach_cameras` from the task config module.
 """

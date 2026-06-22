@@ -44,7 +44,7 @@ class LegoG1MimicEnvCfg(LegoG1TaskCfg, MimicEnvCfg):
         self.datagen_config.generation_guarantee = True
         self.datagen_config.generation_keep_failed = True
         self.datagen_config.generation_num_trials = 1000
-        self.datagen_config.generation_select_src_per_subtask = False
+        self.datagen_config.generation_select_src_per_subtask = True
         self.datagen_config.generation_select_src_per_arm = False
         self.datagen_config.generation_transform_first_robot_pose = False
         self.datagen_config.generation_interpolate_from_last_target_pose = True

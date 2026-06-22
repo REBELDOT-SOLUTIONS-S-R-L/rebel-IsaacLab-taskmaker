@@ -32,7 +32,7 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 {% if cameras %}
-from isaaclab.sensors import CameraCfg
+from isaaclab.sensors import TiledCameraCfg
 {% endif %}
 from isaaclab.sim.spawners.from_files.from_files_cfg import UsdFileCfg
 from isaaclab.utils import configclass
@@ -329,11 +329,11 @@ def attach_cameras(scene_cfg) -> None:
     """Attach cameras to a {{ class_prefix }} scene cfg.
 
     Kept as a module-level helper so the teleop launcher can re-attach the
-    cameras after IsaacLab's XR pipeline strips CameraCfg attributes via
+    cameras after IsaacLab's XR pipeline strips camera cfg attributes via
     ``remove_camera_configs``. Called from ``__post_init__`` for normal runs.
     """
 {% for cam in cameras %}
-    scene_cfg.{{ cam.name }} = CameraCfg(
+    scene_cfg.{{ cam.name }} = TiledCameraCfg(
         prim_path="{{ cam.prim_path }}",
         update_period={{ cam.update_period }},
         height={{ cam.height }},
@@ -345,7 +345,7 @@ def attach_cameras(scene_cfg) -> None:
             horizontal_aperture={{ cam.horizontal_aperture }},
             clipping_range=({{ cam.clipping_range }}),
         ),
-        offset=CameraCfg.OffsetCfg(
+        offset=TiledCameraCfg.OffsetCfg(
             pos=({{ cam.offset_pos }}),
             rot=({{ cam.offset_rot }}),
             convention="{{ cam.convention }}",

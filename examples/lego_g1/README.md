@@ -213,7 +213,7 @@ observations:
 
 ### `cameras` (optional)
 
-Each entry becomes a `CameraCfg` on the scene cfg and is re-attached after
+Each entry becomes a `TiledCameraCfg` on the scene cfg and is re-attached after
 IsaacLab's XR pipeline strips cameras during `remove_camera_configs`.
 
 ```yaml

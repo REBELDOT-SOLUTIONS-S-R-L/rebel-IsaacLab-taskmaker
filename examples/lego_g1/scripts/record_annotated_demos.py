@@ -75,17 +75,8 @@ parser.add_argument(
     default=False,
     help="Enable Pinocchio.",
 )
-parser.add_argument(
-    "--debugging_logs",
-    action="store_true",
-    default=False,
-    help="Print detailed subtask predicate diagnostics such as distances, thresholds, and pass/fail rows.",
-)
-
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
-
-os.environ["LEGO_G1_DEBUG_SUBTASKS"] = "10" if args_cli.debugging_logs else "0"
 
 app_launcher_args = vars(args_cli)
 
@@ -629,11 +620,6 @@ def main() -> int:
                     log_status(logging.INFO, "Latched: %s", ", ".join(newly_latched))
                     log_status(logging.INFO, "Annotation progress: %s", format_progress(annotator))
 
-                # Publish the current queue heads so subtask obs functions only print
-                # debug info for the signal each EEF is actively waiting on.
-                env._debug_subtask_heads = {
-                    signal for signal in annotator.current_signal_heads().values() if signal is not None
-                }
                 _, _, terminated, truncated, _ = env.step(action)
 
                 if annotator.is_complete() and not completion_announced:

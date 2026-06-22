@@ -195,10 +195,10 @@ class BaseILEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization — override in task configs, calling super().__post_init__()."""
         # Simulation defaults
-        self.decimation = 6
+        self.decimation = 4
         self.episode_length_s = 20.0
         self.sim.dt = 1 / 120  # 120 Hz
-        self.sim.render_interval = 2
+        self.sim.render_interval = 1
 
         # Mimic recorder needs the same EEF list that BaseILEnv's API methods iterate.
         # Subclasses that set `self.eef_names` should call super().__post_init__()
