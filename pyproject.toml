@@ -137,6 +137,7 @@ ignore-words-list = "haa,slq,collapsable,buss,reacher,thirdparty"
 
 [tool.pytest.ini_options]
 
+testpaths = ["tests"]
 markers = [
     "isaacsim_ci: mark test to run in isaacsim ci",
 ]
