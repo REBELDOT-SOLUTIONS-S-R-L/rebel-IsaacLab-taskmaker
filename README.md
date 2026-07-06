@@ -58,8 +58,14 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
 ## Prerequisites
 
 - The [REBELDOT Isaac Lab fork](https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab)
-  installed (conda or uv). The taskmaker-generated projects depend on hooks
-  and script support from this fork; upstream Isaac Lab is not sufficient.
+  installed in a dedicated Python environment. The taskmaker-generated projects
+  depend on hooks and script support from this fork; upstream Isaac Lab is not
+  sufficient.
+- Follow the
+  [Isaac Lab pip installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html)
+  for the base Isaac Lab environment setup. Whether you create the environment
+  with uv, conda, or Python's built-in venv, activate that environment before
+  installing or running Task Maker.
 - Python 3.10+.
 
 ## Installation
@@ -68,11 +74,30 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
 git clone https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab-Task-Maker.git
 cd IsaacLab-Task-Maker
 
-conda activate <your-isaaclab-env>      # e.g. conda activate isaaclab
+# Activate your Isaac Lab environment first.
+# Examples:
+conda activate <your-isaaclab-env>
+# source <your-isaaclab-env>/bin/activate
+
 pip install -e source/IsaacLabTaskMaker
 ```
 
 That's it — no script patching, no extra imports to add anywhere.
+
+## Running tests
+
+Install Task Maker into your activated Isaac Lab environment, then run pytest
+from the repository root:
+
+```bash
+python -m pytest
+```
+
+To run one test file while iterating:
+
+```bash
+python -m pytest tests/test_yaml_validation.py
+```
 
 ## Quick start
 
