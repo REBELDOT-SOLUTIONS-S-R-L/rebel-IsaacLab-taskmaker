@@ -309,11 +309,18 @@ def _create_jinja_env() -> Environment:
 # Utilities
 # ---------------------------------------------------------------------------
 def snake_to_pascal(name: str) -> str:
-    """Convert snake_case to PascalCase.  tm7_g1 -> TM7G1"""
-    return "".join(
-        part.upper() if part.isalpha() and len(part) <= 3 else part.capitalize()
-        for part in name.split("_")
-    )
+    """Convert a snake_case task name into a valid PascalCase class prefix.
+
+    Each underscore-delimited token is capitalized (first character upper, rest
+    lower) and the tokens are concatenated, so the result is always a valid
+    Python identifier fragment. Empty tokens from leading/trailing/repeated
+    underscores are dropped.
+
+        franka_panda -> FrankaPanda
+        tm7_g1       -> Tm7G1
+        franka_osc   -> FrankaOsc
+    """
+    return "".join(part.capitalize() for part in name.split("_") if part)
 
 
 _DEVICE_DEFAULT_SENSITIVITY: dict[str, tuple[float, float]] = {

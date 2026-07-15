@@ -20,6 +20,7 @@ INSTALL_REQUIRES = [
     # NOTE: Add dependencies
     "psutil",
     "jinja2",
+    "pytest",
 ]
 
 # Installation operation
