@@ -2,15 +2,25 @@
 # package ecosystems to update and where the package manifests are located.
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 version: 2
 
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
+  # Python deps are declared in setup.py (setuptools) → use the "pip" ecosystem.
+  # They live in the package subdir, not at the repo root.
+  - package-ecosystem: "pip"
+    directory: "/source/IsaacLabTaskMaker"
     schedule:
       interval: "weekly"
 
+  # Optional: the bundled example is a separate package with its own setup.py.
+  # Drop this block if you don't want PRs against example code.
+  - package-ecosystem: "pip"
+    directory: "/examples/lego_g1/source/lego_g1"
+    schedule:
+      interval: "weekly"
+
+  # Keep this ONLY once you actually have .github/workflows/*.yml.
+  # With no workflows in the repo today, it's inert — add it when you add CI.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
