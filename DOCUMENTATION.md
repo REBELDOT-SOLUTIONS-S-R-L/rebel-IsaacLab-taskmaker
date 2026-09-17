@@ -1,10 +1,10 @@
-# IsaacLab Task Maker
+# rebel-IsaacLab-taskmaker
 
-A scaffolding tool for [Isaac Lab](https://github.com/isaac-sim/IsaacLab) imitation learning (IL) tasks. Instead of hand-writing the boilerplate that every new manipulation task needs — scene config, robot articulation, observation/action managers, MDP terms, gym registration — you describe the task in a single **YAML file** and a code generator produces a working Isaac Lab extension you can teleoperate immediately.
+An open-source scaffolding tool by [RebelDot](https://www.rebeldot.com) for [Isaac Lab](https://github.com/isaac-sim/IsaacLab) imitation learning (IL) tasks. Instead of hand-writing the boilerplate that every new manipulation task needs — scene config, robot articulation, observation/action managers, MDP terms, gym registration — you describe the task in a single **YAML file** and a code generator produces a working Isaac Lab extension you can teleoperate immediately.
 
 ## What it solves
 
-Setting up a new IL task in Isaac Lab usually means copying an existing example, renaming dozens of symbols, threading the robot through scene/observation/action configs, and re-implementing the four mandatory `ManagerBasedRLMimicEnv` methods. Task Maker collapses that into a YAML edit and a single command.
+Setting up a new IL task in Isaac Lab usually means copying an existing example, renaming dozens of symbols, threading the robot through scene/observation/action configs, and re-implementing the four mandatory `ManagerBasedRLMimicEnv` methods. `rebel-IsaacLab-taskmaker` collapses that into a YAML edit and a single command.
 
 ## How it works
 
@@ -71,3 +71,11 @@ A one-line addition to Isaac Lab's `teleop_se3_agent.py` (`import isaaclab_task_
 ## Status
 
 Active development on the `dev` branch. License: BSD-3-Clause.
+
+## About
+
+`rebel-IsaacLab-taskmaker` is developed and maintained by
+[RebelDot](https://www.rebeldot.com) and published as an open-source tool for
+the Isaac Lab robotics community. Contributions, issues, and forks are welcome
+at
+[github.com/REBELDOT-SOLUTIONS-S-R-L/rebel-IsaacLab-taskmaker](https://github.com/REBELDOT-SOLUTIONS-S-R-L/rebel-IsaacLab-taskmaker).
