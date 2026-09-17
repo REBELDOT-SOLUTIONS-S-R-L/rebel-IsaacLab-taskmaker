@@ -1,3 +1,11 @@
+<p align="center">
+  <img
+    src="assets/logos/rebeldot-logo-tagline-white-yellow@3x.png"
+    alt="RebelDot — Leading the Change"
+    width="360"
+  />
+</p>
+
 # RebelDot IsaacLab Task Maker
 
 Config-only imitation-learning task creation for the
@@ -815,4 +823,10 @@ BSD-3-Clause.
 `rebel-IsaacLab-taskmaker` is an open-source tool developed and maintained by
 [RebelDot](https://www.rebeldot.com).
 
-![img](assets/logos/rebeldot-logo-tagline-white-yellow@3x.png)
+<p align="center">
+  <img
+    src="assets/logos/rebeldot-logo-tagline-white-yellow@3x.png"
+    alt="RebelDot — Leading the Change"
+    width="360"
+  />
+</p>
