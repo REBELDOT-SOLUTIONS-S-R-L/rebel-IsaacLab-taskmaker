@@ -1,4 +1,12 @@
-# IsaacLab Task Maker
+<p align="center">
+  <img
+    src="assets/logos/rebeldot-logo-tagline-white-yellow@3x.png"
+    alt="RebelDot — Leading the Change"
+    width="360"
+  />
+</p>
+
+# RebelDot IsaacLab Task Maker
 
 Config-only imitation-learning task creation for the
 [REBELDOT Isaac Lab fork](https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab).
@@ -8,6 +16,10 @@ standalone Isaac Lab extension with the scene, controller, observations,
 teleop bindings, cameras, and Mimic data-generation wiring already in place.
 You spend your time filling in subtask logic and tuning thresholds — not
 writing boilerplate.
+
+`rebel-IsaacLab-taskmaker` is developed by [RebelDot](https://www.rebeldot.com)
+and released as an open-source tool for the Isaac Lab robotics community —
+contributions, issues, and forks are welcome.
 
 ```bash
 python scripts/create_task.py templates/task_definitions/g1_lego.yaml
@@ -65,14 +77,14 @@ python scripts/create_task.py templates/task_definitions/g1_lego.yaml
   [Isaac Lab pip installation guide](https://isaac-sim.github.io/IsaacLab/main/source/setup/installation/pip_installation.html)
   for the base Isaac Lab environment setup. Whether you create the environment
   with uv, conda, or Python's built-in venv, activate that environment before
-  installing or running Task Maker.
+  installing or running rebel-IsaacLab-taskmaker.
 - Python 3.10+.
 
 ## Installation
 
 ```bash
-git clone https://github.com/REBELDOT-SOLUTIONS-S-R-L/IsaacLab-Task-Maker.git
-cd IsaacLab-Task-Maker
+git clone https://github.com/REBELDOT-SOLUTIONS-S-R-L/rebel-IsaacLab-taskmaker.git
+cd rebel-IsaacLab-taskmaker
 
 # Activate your Isaac Lab environment first.
 # Examples:
@@ -86,8 +98,8 @@ That's it — no script patching, no extra imports to add anywhere.
 
 ## Running tests
 
-Install Task Maker into your activated Isaac Lab environment, then run pytest
-from the repository root:
+Install rebel-IsaacLab-taskmaker into your activated Isaac Lab environment,
+then run pytest from the repository root:
 
 ```bash
 python -m pytest
@@ -800,10 +812,21 @@ files are written, so a bad YAML fails fast with a readable error.
                         └── terminations.py
 ```
 
-The taskmaker repo itself contains the **templates and generator** — generated
-projects live wherever you point `--output-dir` at (defaults to the current
-directory).
+The `rebel-IsaacLab-taskmaker` repo itself contains the **templates and
+generator** — generated projects live wherever you point `--output-dir` at
+(defaults to the current directory).
 
 ## License
 
-BSD-3-Clause
+BSD-3-Clause.
+
+`rebel-IsaacLab-taskmaker` is an open-source tool developed and maintained by
+[RebelDot](https://www.rebeldot.com).
+
+<p align="center">
+  <img
+    src="assets/logos/rebeldot-logo-tagline-white-yellow@3x.png"
+    alt="RebelDot — Leading the Change"
+    width="360"
+  />
+</p>

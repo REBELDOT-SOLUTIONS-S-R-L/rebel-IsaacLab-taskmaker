@@ -7,11 +7,11 @@ version = "0.1.0"
 category = "isaaclab"
 readme  = "README.md"
 
-title = "IsaacLab IL Task Maker"
+title = "rebel-IsaacLab-taskmaker"
 author = "REBELDOT Solutions"
 maintainer = "REBELDOT Solutions"
 description="Config-only imitation learning task creation for Isaac Lab"
-repository = "https://github.com/REBELDOT-SOLUTIONS-S-R-L/ROBOTICS-IsaacLab-Task-Maker.git"
+repository = "https://github.com/REBELDOT-SOLUTIONS-S-R-L/rebel-IsaacLab-taskmaker.git"
 keywords = ["imitation-learning", "isaaclab", "teleoperation"]
 
 [dependencies]
